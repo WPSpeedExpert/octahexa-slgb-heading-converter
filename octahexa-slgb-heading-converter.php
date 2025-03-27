@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Heading Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-heading-converter
  * Description:       Converts slgb/h1–h6 blocks to core/heading blocks with proper HTML formatting.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -88,9 +88,30 @@ add_action('admin_menu', 'oh_register_slgb_converter_page');
  */
 function oh_render_slgb_converter_page() {
     $url = admin_url('tools.php?page=oh-slgb-converter&oh_convert_headings=1');
-    echo '<div class="wrap">';
-    echo '<h1>Convert SLGB Custom Headings</h1>';
-    echo '<p>This tool will scan all posts and convert <code>slgb/h1–h6</code> blocks to <code>core/heading</code>.</p>';
-    echo '<a href="' . esc_url($url) . '" class="button button-primary">Run Conversion</a>';
-    echo '</div>';
+    ?>
+    <div class="wrap">
+        <h1>Convert SLGB Custom Headings</h1>
+        <p>This tool scans all posts and converts <code>slgb/h1–h6</code> blocks to native <code>core/heading</code> blocks.</p>
+        <a href="<?php echo esc_url($url); ?>" id="oh-convert-run" class="button button-primary">Run Conversion</a>
+        <p id="oh-progress-msg" style="margin-top: 10px;"></p>
+    </div>
+
+    <script>
+        document.getElementById('oh-convert-run')?.addEventListener('click', function () {
+            const msg = document.getElementById('oh-progress-msg');
+            msg.textContent = 'Processing… Please wait.';
+        });
+    </script>
+    <?php
 }
+
+/**
+ * Add "Settings" link in Plugins list
+ */
+function oh_slgb_plugin_action_links($links) {
+    $url = admin_url('tools.php?page=oh-slgb-converter');
+    $settings_link = '<a href="' . esc_url($url) . '">Settings</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+}
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');

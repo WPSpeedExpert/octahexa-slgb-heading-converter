@@ -9,7 +9,7 @@ Useful when switching themes or AMP modes that do not support custom block types
 
 - **Plugin Name:** OctaHexa SLGB Heading Converter  
 - **Author:** OctaHexa  
-- **Version:** 1.0.0  
+- **Version:** 1.0.1 
 - **GitHub URI:** https://github.com/WPSpeedExpert/octahexa-slgb-heading-converter
 
 ---

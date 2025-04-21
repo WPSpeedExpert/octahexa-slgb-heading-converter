@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.0.1
+ * Version:           2.0.2
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -340,8 +340,8 @@ function oh_convert_slgb_blocks() {
                                     
                                     // Default to 3 columns if we couldn't determine
                                     $numCols = $numCols > 0 ? $numCols : 3;
-                                    
-                                    foreach ($cellMatches[0] as $cellData) {
+
+                                foreach ($cellMatches[0] as $cellData) {
                                         // Extract cell content
                                         preg_match('/content(.*?):(.*?)(?:,|$)/', $cellData, $contentMatch);
                                         $cellContent = !empty($contentMatch[2]) ? trim($contentMatch[2], '"u0022') : '';
@@ -489,8 +489,8 @@ function oh_convert_slgb_blocks() {
                             if (preg_match('/"title":"(.*?)"/', $columnAttrs, $titleMatch)) {
                                 $title = json_decode('"' . $titleMatch[1] . '"');
                             }
-                            
-                            // Process the column content - find the existing div and its content
+
+                        // Process the column content - find the existing div and its content
                             preg_match('/<div class="gb-compare__column">.*?<h4.*?>(.*?)<\/h4>.*?<div class="gb-compare__content">(.*?)<\/div><\/div>/s', 
                                 $columnContent, 
                                 $contentParts
@@ -598,12 +598,10 @@ function oh_convert_slgb_blocks() {
                         '<!-- wp:quote {"className":"%s"} -->' . "\n" .
                         '<blockquote class="wp-block-quote %s">' . "\n" .
                         '<p>%s</p>' . "\n",
-                        esc_attr($className),
-                        esc_attr($className),
-                        $text // Using text directly, not escaped
-                    );
-                    
-                    // Add citation if author exists
+                        esc_attr($className)),
+                        esc_attr($className
+
+                                 // Add citation if author exists
                     if (!empty($author)) {
                         $output .= sprintf('<cite>%s</cite>' . "\n", $author);
                     }
@@ -739,8 +737,8 @@ function oh_convert_slgb_blocks() {
                             esc_html($title)
                         );
                     }
-                    
-                    // Add description if exists
+
+                // Add description if exists
                     if (!empty($description)) {
                         $output .= sprintf(
                             '<!-- wp:paragraph {"align":"center"} -->' . "\n" .
@@ -856,8 +854,8 @@ function oh_convert_slgb_blocks() {
                     }
                     
                     $miniature_count++;
-                    
-                    // Create a media-text block if we have an image, otherwise just use a group
+
+                // Create a media-text block if we have an image, otherwise just use a group
                     if (!empty($image_src)) {
                         return sprintf(
                             '<!-- wp:media-text {"mediaLink":"%s","mediaType":"image","className":"%s"} -->' . "\n" .
@@ -979,8 +977,8 @@ function oh_convert_slgb_blocks() {
             if ($emph_count > 0) {
                 echo sprintf('<li>%d emphasis blocks</li>', $emph_count);
             }
-            
-            if ($image_count > 0) {
+
+                   if ($image_count > 0) {
                 echo sprintf('<li>%d image blocks</li>', $image_count);
             }
             
@@ -1023,7 +1021,120 @@ function oh_convert_slgb_blocks() {
 }
 add_action('admin_init', 'oh_convert_slgb_blocks');
 
-text-align: center;
+/**
+ * Add a page in Tools to trigger the conversion.
+ */
+function oh_register_slgb_converter_page() {
+    add_management_page(
+        'Convert SLGB Blocks',
+        'Convert SLGB Blocks',
+        'manage_options',
+        'oh-slgb-converter',
+        'oh_render_slgb_converter_page'
+    );
+}
+add_action('admin_menu', 'oh_register_slgb_converter_page');
+
+/**
+ * Render the admin page UI.
+ */
+function oh_render_slgb_converter_page() {
+    $url = admin_url('tools.php?page=oh-slgb-converter&oh_convert_blocks=1');
+    ?>
+    <div class="wrap">
+        <h1>Convert SLGB Custom Blocks</h1>
+        
+        <div class="card" style="max-width: 800px; margin-bottom: 20px; padding: 20px;">
+            <h2>About This Tool</h2>
+            <p>This tool scans all posts and converts custom SLGB blocks to native WordPress core blocks:</p>
+            <ul style="list-style-type: disc; margin-left: 20px;">
+                <li><code>slgb/h1-h6</code> → <code>core/heading</code> blocks</li>
+                <li><code>slgb/emph</code> → <code>core/paragraph</code> blocks</li>
+                <li><code>slgb/image</code> → <code>core/image</code> blocks</li>
+                <li><code>slgb/table</code> → <code>core/html</code> blocks (with HTML tables)</li>
+                <li><code>slgb/gb-subscribe</code> → <code>core/group</code> with paragraph and button</li>
+                <li><code>slgb/p-compare</code> → <code>core/columns</code> blocks</li>
+                <li><code>slgb/p-hints</code> → <code>core/html</code> blocks (with HTML tables)</li>
+                <li><code>slgb/p-quote</code> → <code>core/quote</code> blocks</li>
+                <li><code>slgb/p-miniature</code> → <code>core/media-text</code> or <code>core/group</code> blocks</li>
+                <li><code>slgb/gb-cta</code> → <code>core/group</code> with heading and buttons</li>
+                <li><code>slgb/gb-emph</code> → <code>core/group</code> with preserved content</li>
+            </ul>
+            <p><strong>CSS Classes Preserved:</strong> The plugin maintains all custom CSS classes from your original blocks and adds conversion-specific classes to help with styling.</p>
+            <p><strong>Important:</strong> Always back up your database before running this conversion.</p>
+        </div>
+        
+        <div class="card" style="max-width: 800px; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa;">
+            <h3>CSS Styling Help</h3>
+            <p>After conversion, you may need to add custom CSS to your theme to maintain the original appearance. The following classes are added to converted blocks:</p>
+            <ul style="list-style-type: disc; margin-left: 20px;">
+                <li><code>slgb-table-converted</code> - For converted tables</li>
+                <li><code>slgb-subscribe-converted</code> - For subscribe forms</li>
+                <li><code>slgb-compare-converted</code> - For comparison blocks</li>
+                <li><code>slgb-compare-column</code> - For columns within compare blocks</li>
+                <li><code>slgb-hints-converted</code> - For hint tables</li>
+                <li><code>slgb-quote-converted</code> - For quotes</li>
+                <li><code>slgb-miniature-converted</code> - For miniature post blocks</li>
+                <li><code>slgb-cta-converted</code> - For CTA blocks</li>
+                <li><code>slgb-gb-emph-converted</code> - For emphasis blocks</li>
+                <li><code>slgb-emph</code> - For regular emphasis blocks</li>
+            </ul>
+        </div>
+
+    <a href="<?php echo esc_url($url); ?>" id="oh-convert-run" class="button button-primary">Run Conversion</a>
+        <p id="oh-progress-msg" style="margin-top: 10px;"></p>
+    </div>
+
+    <script>
+        document.getElementById('oh-convert-run')?.addEventListener('click', function() {
+            const msg = document.getElementById('oh-progress-msg');
+            msg.textContent = 'Processing… This may take a while for sites with many posts. Please do not close this window.';
+        });
+    </script>
+    <?php
+}
+
+/**
+ * Add "Settings" link in Plugins list
+ */
+function oh_slgb_plugin_action_links($links) {
+    $url = admin_url('tools.php?page=oh-slgb-converter');
+    $settings_link = '<a href="' . esc_url($url) . '">Settings</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+}
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');
+
+/**
+ * Add custom CSS for converted blocks
+ */
+function oh_add_conversion_css() {
+    ?>
+    <style>
+        /* Basic styling for converted blocks */
+        .slgb-table-converted {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1.5em;
+        }
+        
+        .slgb-table-converted th, 
+        .slgb-table-converted td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .slgb-table-converted th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .slgb-subscribe-converted {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
             margin: 1.5em 0;
         }
         

@@ -118,8 +118,8 @@ function oh_convert_slgb_blocks() {
                 },
                 $updated
             );
-            
-            // Convert image blocks
+
+        // Convert image blocks
             $updated = preg_replace_callback(
                 '/<!-- wp:slgb\/image (.*?) -->\s*<img (.*?)\/>\s*<!-- \/wp:slgb\/image -->/',
                 function ($matches) use (&$image_count) {
@@ -232,138 +232,159 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
             
-                    // Convert table blocks
-                    $updated = preg_replace_callback(
-                        '/<\!-- wp:slgb\/table (.*?) \/-->/',
-                        function ($matches) use (&$table_count) {
-                            $attrString = $matches[1];
+            // Convert table blocks
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/table (.*?) \/-->/',
+                function ($matches) use (&$table_count) {
+                    $attrString = $matches[1];
+                    
+                    // Try to extract the cells data
+                    if (preg_match('/"cells":"(.*?)"/', $attrString, $cellsMatch)) {
+                        try {
+                            // Replace unicode escape sequences with actual quote characters 
+                            $processedJson = str_replace('u0022', '"', $cellsMatch[1]);
                             
-                            // Try to extract the cells data
-                            if (preg_match('/"cells":"(.*?)"/', $attrString, $cellsMatch)) {
-                                try {
-                                    // Replace unicode escape sequences with actual quote characters 
-                                    $processedJson = str_replace('u0022', '"', $cellsMatch[1]);
+                            // Double decode to handle escaped JSON
+                            $processedJson = json_decode('"' . $processedJson . '"');
+                            $cells = json_decode($processedJson, true);
+                            
+                            if (is_array($cells)) {
+                                // Build a standard HTML table
+                                $tableHtml = '<table class="slgb-table-converted"><tbody>';
+                                
+                                foreach ($cells as $rowIndex => $row) {
+                                    $tableHtml .= '<tr>';
                                     
-                                    // Double decode to handle escaped JSON
-                                    $processedJson = json_decode('"' . $processedJson . '"');
-                                    $cells = json_decode($processedJson, true);
-                                    
-                                    if (is_array($cells)) {
-                                        // Build a standard HTML table
-                                        $tableHtml = '<table class="slgb-table-converted"><tbody>';
+                                    foreach ($row as $cell) {
+                                        // Get cell content and decode escaped HTML
+                                        $content = isset($cell['content']) ? $cell['content'] : '';
+                                        // No need to double decode here as we already handled it above
                                         
-                                        foreach ($cells as $rowIndex => $row) {
-                                            $tableHtml .= '<tr>';
-                                            
-                                            foreach ($row as $cell) {
-                                                // Get cell content and decode escaped HTML
-                                                $content = isset($cell['content']) ? $cell['content'] : '';
-                                                // No need to double decode here as we already handled it above
-                                                
-                                                // Apply colspan and rowspan if needed
-                                                $attrs = '';
-                                                if (isset($cell['cols']) && $cell['cols'] > 1) {
-                                                    $attrs .= sprintf(' colspan="%d"', $cell['cols']);
-                                                }
-                                                if (isset($cell['rows']) && $cell['rows'] > 1) {
-                                                    $attrs .= sprintf(' rowspan="%d"', $cell['rows']);
-                                                }
-                                                
-                                                // Use th for header cells (first row)
-                                                $tag = $rowIndex === 0 ? 'th' : 'td';
-                                                $tableHtml .= sprintf('<%s%s>%s</%s>', $tag, $attrs, $content, $tag);
-                                            }
-                                            
-                                            $tableHtml .= '</tr>';
+                                        // Apply colspan and rowspan if needed
+                                        $attrs = '';
+                                        if (isset($cell['cols']) && $cell['cols'] > 1) {
+                                            $attrs .= sprintf(' colspan="%d"', $cell['cols']);
+                                        }
+                                        if (isset($cell['rows']) && $cell['rows'] > 1) {
+                                            $attrs .= sprintf(' rowspan="%d"', $cell['rows']);
                                         }
                                         
-                                        $tableHtml .= '</tbody></table>';
-                                        $table_count++;
-                                        
-                                        // Create a core/html block with the table
-                                        return sprintf(
-                                            '<!-- wp:html -->' . "\n" . '%s' . "\n" . '<!-- /wp:html -->',
-                                            $tableHtml
-                                        );
+                                        // Use th for header cells (first row)
+                                        $tag = $rowIndex === 0 ? 'th' : 'td';
+                                        $tableHtml .= sprintf('<%s%s>%s</%s>', $tag, $attrs, $content, $tag);
                                     }
-                                } catch (Exception $e) {
-                                    // Log error for debugging
-                                    error_log('SLGB Table Conversion Error: ' . $e->getMessage());
                                     
-                                    // Fallback method for problematic tables
-                                    try {
-                                        // Direct approach to extract table structure
-                                        $cellsRaw = $cellsMatch[1];
-                                        // Replace unicode escapes manually
-                                        $cellsRaw = str_replace(['u0022cols', 'u0022rows', 'u0022content'], ['"cols', '"rows', '"content'], $cellsRaw);
-                                        
-                                        // Try to manually build the table by parsing the structure
-                                        preg_match_all('/\{(.*?)\}/', $cellsRaw, $cellMatches);
-                                        
-                                        if (!empty($cellMatches[0])) {
-                                            $rows = [];
-                                            $currentRow = [];
-                                            $rowCount = 0;
-                                            
-                                            foreach ($cellMatches[0] as $cellData) {
-                                                // Extract cell content
-                                                preg_match('/content(.*?):(.*?)(?:,|$)/', $cellData, $contentMatch);
-                                                $cellContent = !empty($contentMatch[2]) ? trim($contentMatch[2], '"u0022') : '';
-                                                
-                                                // Add to current row
-                                                $currentRow[] = $cellContent;
-                                                
-                                                // If we have 3 cells (assuming 3-column table), start a new row
-                                                if (count($currentRow) === 3) {
-                                                    $rows[] = $currentRow;
-                                                    $currentRow = [];
-                                                    $rowCount++;
-                                                }
-                                            }
-                                            
-                                            // Add any remaining cells
-                                            if (!empty($currentRow)) {
-                                                $rows[] = $currentRow;
-                                            }
-                                            
-                                            // Build table HTML manually
-                                            $tableHtml = '<table class="slgb-table-converted"><tbody>';
-                                            
-                                            foreach ($rows as $rowIndex => $row) {
-                                                $tableHtml .= '<tr>';
-                                                
-                                                foreach ($row as $cellContent) {
-                                                    // Use th for header cells (first row)
-                                                    $tag = $rowIndex === 0 ? 'th' : 'td';
-                                                    $tableHtml .= sprintf('<%s>%s</%s>', $tag, $cellContent, $tag);
-                                                }
-                                                
-                                                $tableHtml .= '</tr>';
-                                            }
-                                            
-                                            $tableHtml .= '</tbody></table>';
-                                            $table_count++;
-                                            
-                                            // Create a core/html block with the table
-                                            return sprintf(
-                                                '<!-- wp:html -->' . "\n" . '%s' . "\n" . '<!-- /wp:html -->',
-                                                $tableHtml
-                                            );
-                                        }
-                                    } catch (Exception $innerE) {
-                                        // Final fallback - just return original if all else fails
-                                        error_log('SLGB Table Fallback Conversion Error: ' . $innerE->getMessage());
-                                    }
+                                    $tableHtml .= '</tr>';
                                 }
+                                
+                                $tableHtml .= '</tbody></table>';
+                                $table_count++;
+                                
+                                // Create a core/html block with the table
+                                return sprintf(
+                                    '<!-- wp:html -->' . "\n" . '%s' . "\n" . '<!-- /wp:html -->',
+                                    $tableHtml
+                                );
                             }
+                        } catch (Exception $e) {
+                            // Log error for debugging
+                            error_log('SLGB Table Conversion Error: ' . $e->getMessage());
                             
-                            // If we couldn't extract cells data or conversion failed, return the original
-                            return $matches[0];
-                        },
-                        $updated
-                    );
-            
-            // Convert gb-subscribe blocks to paragraphs with a form button
+                            // Fallback method for problematic tables
+                            try {
+                                // Direct approach to extract table structure
+                                $cellsRaw = $cellsMatch[1];
+                                // Replace unicode escapes manually
+                                $cellsRaw = str_replace(['u0022cols', 'u0022rows', 'u0022content'], ['"cols', '"rows', '"content'], $cellsRaw);
+                                
+                                // Try to manually build the table by parsing the structure
+                                preg_match_all('/\{(.*?)\}/', $cellsRaw, $cellMatches);
+                                
+                                if (!empty($cellMatches[0])) {
+                                    $rows = [];
+                                    $currentRow = [];
+                                    $rowCount = 0;
+                                    
+                                    // Count number of columns by checking the first row structure
+                                    $numCols = 0;
+                                    $pattern = '/content/';
+                                    $matches = preg_match_all($pattern, $cellsRaw, $colMatches);
+                                    if ($matches) {
+                                        // Try to determine columns by analyzing the pattern
+                                        $content = $cellsRaw;
+                                        $rowDelimiters = ["]", "["];
+                                        $rows = explode($rowDelimiters[0] . $rowDelimiters[1], $content);
+                                        
+                                        if (count($rows) < 2) {
+                                            // If we couldn't split by row delimiters, try another approach
+                                            $cellPattern = '/content(.*?):(.*?)(?:,|$)/';
+                                            preg_match_all($cellPattern, $cellMatches[0][0] . $cellMatches[0][1] . $cellMatches[0][2], $firstRowCells);
+                                            $numCols = count($firstRowCells[0]);
+                                        }
+                                    }
+                                    
+                                    // Default to 3 columns if we couldn't determine
+                                    $numCols = $numCols > 0 ? $numCols : 3;
+                                    
+                                    foreach ($cellMatches[0] as $cellData) {
+                                        // Extract cell content
+                                        preg_match('/content(.*?):(.*?)(?:,|$)/', $cellData, $contentMatch);
+                                        $cellContent = !empty($contentMatch[2]) ? trim($contentMatch[2], '"u0022') : '';
+                                        
+                                        // Add to current row
+                                        $currentRow[] = $cellContent;
+                                        
+                                        // If we have numCols cells, start a new row
+                                        if (count($currentRow) === $numCols) {
+                                            $rows[] = $currentRow;
+                                            $currentRow = [];
+                                            $rowCount++;
+                                        }
+                                    }
+                                    
+                                    // Add any remaining cells
+                                    if (!empty($currentRow)) {
+                                        $rows[] = $currentRow;
+                                    }
+                                    
+                                    // Build table HTML manually
+                                    $tableHtml = '<table class="slgb-table-converted"><tbody>';
+                                    
+                                    foreach ($rows as $rowIndex => $row) {
+                                        $tableHtml .= '<tr>';
+                                        
+                                        foreach ($row as $cellContent) {
+                                            // Use th for header cells (first row)
+                                            $tag = $rowIndex === 0 ? 'th' : 'td';
+                                            $tableHtml .= sprintf('<%s>%s</%s>', $tag, $cellContent, $tag);
+                                        }
+                                        
+                                        $tableHtml .= '</tr>';
+                                    }
+                                    
+                                    $tableHtml .= '</tbody></table>';
+                                    $table_count++;
+                                    
+                                    // Create a core/html block with the table
+                                    return sprintf(
+                                        '<!-- wp:html -->' . "\n" . '%s' . "\n" . '<!-- /wp:html -->',
+                                        $tableHtml
+                                    );
+                                }
+                            } catch (Exception $innerE) {
+                                // Final fallback - just return original if all else fails
+                                error_log('SLGB Table Fallback Conversion Error: ' . $innerE->getMessage());
+                            }
+                        }
+                    }
+                    
+                    // If we couldn't extract cells data, return the original
+                    return $matches[0];
+                },
+                $updated
+            );
+
+        // Convert gb-subscribe blocks to paragraphs with a form button
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-subscribe (.*?) \/-->/',
                 function ($matches) use (&$subscribe_count) {
@@ -471,7 +492,12 @@ function oh_convert_slgb_blocks() {
                     // Extract the text
                     $text = '';
                     if (preg_match('/"text":"(.*?)"(?:,|})/', $attrString, $textMatch)) {
-                        $text = json_decode('"' . str_replace('"', '\\"', $textMatch[1]) . '"');
+                        // First, replace Unicode escape sequences with proper characters
+                        $escapedText = $textMatch[1];
+                        $escapedText = str_replace(['u003c', 'u003e', 'u0026'], ['<', '>', '&'], $escapedText);
+                        
+                        // Then decode JSON properly
+                        $text = json_decode('"' . str_replace('"', '\\"', $escapedText) . '"');
                     }
                     
                     // Extract the author
@@ -486,9 +512,12 @@ function oh_convert_slgb_blocks() {
                         $featured = $featuredMatch[1] === 'true';
                     }
                     
-                    // Extract content from blockquote if available
-                    if (preg_match('/<blockquote><p>(.*?)<\/p><\/blockquote>/s', $content, $contentMatch)) {
+                    // Extract content from blockquote if available and text is empty
+                    if (empty($text) && preg_match('/<blockquote><p>(.*?)<\/p><\/blockquote>/s', $content, $contentMatch)) {
                         $text = $contentMatch[1];
+                        
+                        // Convert HTML entities back to characters
+                        $text = html_entity_decode($text);
                     }
                     
                     $quote_count++;
@@ -506,7 +535,7 @@ function oh_convert_slgb_blocks() {
                         '<p>%s</p>' . "\n",
                         $className,
                         $className,
-                        $text
+                        $text // Using text directly, not escaped
                     );
                     
                     // Add citation if author exists
@@ -520,8 +549,8 @@ function oh_convert_slgb_blocks() {
                 },
                 $updated
             );
-            
-            // Convert p-hints blocks to tables
+
+        // Convert p-hints blocks to tables
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-hints -->(.*?)<!-- \/wp:slgb\/p-hints -->/s',
                 function ($matches) use (&$hints_count) {
@@ -667,8 +696,8 @@ function oh_convert_slgb_blocks() {
                 },
                 $updated
             );
-            
-            // Convert Miniature blocks
+
+        // Convert Miniature blocks
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-miniature (.*?) -->(.*?)<!-- \/wp:slgb\/p-miniature -->/s',
                 function ($matches) use (&$miniature_count) {
@@ -830,8 +859,8 @@ function oh_convert_slgb_blocks() {
             if ($emph_count > 0) {
                 echo sprintf('<li>%d emphasis blocks</li>', $emph_count);
             }
-            
-            if ($image_count > 0) {
+
+                   if ($image_count > 0) {
                 echo sprintf('<li>%d image blocks</li>', $image_count);
             }
             

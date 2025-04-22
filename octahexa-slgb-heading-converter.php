@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.0.1
+ * Version:           2.1.0
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -48,8 +48,8 @@ function oh_convert_slgb_blocks() {
         foreach ($posts as $post) {
             $original = $post->post_content;
             $updated = $original;
-            
-            // Convert heading blocks
+
+        // Convert heading blocks
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/h([1-6]) (.*?) \/-->/',
                 function ($matches) use (&$heading_count) {
@@ -59,13 +59,13 @@ function oh_convert_slgb_blocks() {
                     // Extract text content
                     $text = isset($attrs['text']) ? json_decode('"' . $attrs['text'] . '"') : '';
                     
-                    // Extract any custom classes
+                    // Extract any custom classes - preserve exactly as they are
                     $className = isset($attrs['className']) ? $attrs['className'] : '';
                     $customClasses = !empty($className) ? ' class="' . esc_attr($className) . '"' : '';
                     
                     $heading_count++;
                     
-                    // Include the class in the converted heading
+                    // Include the class in the converted heading - unchanged
                     return sprintf(
                         '<!-- wp:heading {"level":%d%s} --><h%d%s>%s</h%d><!-- /wp:heading -->',
                         $level,
@@ -79,7 +79,7 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
             
-            // Convert emphasis blocks
+            // Convert emphasis blocks - preserve original classes exactly
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/emph (.*?) \/-->/',
                 function ($matches) use (&$emph_count) {
@@ -91,14 +91,17 @@ function oh_convert_slgb_blocks() {
                         $title = json_decode('"' . $contentMatches[1] . '"');
                         $text = json_decode('"' . $contentMatches[2] . '"');
                         
-                        // Extract custom classes if they exist
+                        // Extract custom classes if they exist and preserve exactly
                         $className = '';
                         if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
                             $className = $classMatch[1];
                         }
                         
-                        // Add a default class if none exists
-                        $className = !empty($className) ? $className : 'slgb-emph';
+                        // If no class, use slgb-emph for backwards compatibility
+                        if (empty($className)) {
+                            $className = 'slgb-emph';
+                        }
+                            
                         $customClasses = ' class="' . esc_attr($className) . '"';
                         
                         $emph_count++;
@@ -154,7 +157,7 @@ function oh_convert_slgb_blocks() {
                             $linkOpensInNewTab = $newTabMatch[1] === 'true';
                         }
                         
-                        // Extract CSS classes
+                        // Extract CSS classes - preserve exactly as they are
                         $className = '';
                         if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
                             $className = $classMatch[1];
@@ -231,12 +234,21 @@ function oh_convert_slgb_blocks() {
                 },
                 $updated
             );
-            
-            // Convert table blocks
+
+        // Convert table blocks - preserve original classes
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/table (.*?) \/-->/',
                 function ($matches) use (&$table_count) {
                     $attrString = $matches[1];
+                    
+                    // Extract any existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-table for backwards compatibility
+                    $tableClass = !empty($existingClasses) ? $existingClasses : 'slgb-table';
                     
                     // Try to extract the cells data
                     if (preg_match('/"cells":"(.*?)"/', $attrString, $cellsMatch)) {
@@ -250,7 +262,7 @@ function oh_convert_slgb_blocks() {
                             
                             if (is_array($cells)) {
                                 // Build a standard HTML table
-                                $tableHtml = '<table class="slgb-table-converted"><tbody>';
+                                $tableHtml = '<table class="' . esc_attr($tableClass) . '"><tbody>';
                                 
                                 foreach ($cells as $rowIndex => $row) {
                                     $tableHtml .= '<tr>';
@@ -347,8 +359,8 @@ function oh_convert_slgb_blocks() {
                                         $rows[] = $currentRow;
                                     }
                                     
-                                    // Build table HTML manually
-                                    $tableHtml = '<table class="slgb-table-converted"><tbody>';
+                                    // Build table HTML manually with preserved class
+                                    $tableHtml = '<table class="' . esc_attr($tableClass) . '"><tbody>';
                                     
                                     foreach ($rows as $rowIndex => $row) {
                                         $tableHtml .= '<tr>';
@@ -384,11 +396,20 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert gb-subscribe blocks to paragraphs with a form button
+        // Convert gb-subscribe blocks to paragraphs with a form button - preserve original classes
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-subscribe (.*?) \/-->/',
                 function ($matches) use (&$subscribe_count) {
                     $attrString = $matches[1];
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-subscribe for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-subscribe';
                     
                     // Extract the title
                     $title = '';
@@ -400,8 +421,8 @@ function oh_convert_slgb_blocks() {
                     
                     // Create a paragraph with the title and a button
                     return sprintf(
-                        '<!-- wp:group {"className":"slgb-subscribe-converted"} -->' . "\n" .
-                        '<div class="wp-block-group slgb-subscribe-converted">' . "\n" .
+                        '<!-- wp:group {"className":"%s"} -->' . "\n" .
+                        '<div class="wp-block-group %s">' . "\n" .
                         '<!-- wp:paragraph {"align":"center","style":{"typography":{"fontWeight":"500"}}} -->' . "\n" .
                         '<p class="has-text-align-center" style="font-weight:500">%s</p>' . "\n" .
                         '<!-- /wp:paragraph -->' . "\n\n" .
@@ -414,19 +435,29 @@ function oh_convert_slgb_blocks() {
                         '<!-- /wp:buttons -->' . "\n" .
                         '</div>' . "\n" .
                         '<!-- /wp:group -->',
+                        esc_attr($className),
+                        esc_attr($className),
                         esc_html($title)
                     );
                 },
                 $updated
             );
             
-            // Convert Compare blocks
-            // This is more complex - we need to handle the parent and child blocks together
-            // First, let's identify and convert the complete p-compare blocks
+            // Convert Compare blocks - preserve original classes
             $updated = preg_replace_callback(
-                '/<\!-- wp:slgb\/p-compare -->(.*?)<!-- \/wp:slgb\/p-compare -->/s',
+                '/<\!-- wp:slgb\/p-compare (.*?)-->(.*?)<!-- \/wp:slgb\/p-compare -->/s',
                 function ($matches) use (&$compare_count) {
-                    $content = $matches[1];
+                    $attrString = $matches[1];
+                    $content = $matches[2];
+                    
+                    // Extract existing parent block classes - preserve exactly as they are
+                    $existingParentClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingParentClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-compare for backwards compatibility
+                    $parentClassName = !empty($existingParentClasses) ? $existingParentClasses : 'slgb-compare';
                     
                     // Extract and convert the individual columns
                     $content = preg_replace_callback(
@@ -434,6 +465,15 @@ function oh_convert_slgb_blocks() {
                         function ($columnMatches) {
                             $columnAttrs = $columnMatches[1];
                             $columnContent = $columnMatches[2];
+                            
+                            // Extract existing column classes - preserve exactly as they are
+                            $existingColumnClasses = '';
+                            if (preg_match('/"className":"([^"]*)"/', $columnAttrs, $classMatch)) {
+                                $existingColumnClasses = $classMatch[1];
+                            }
+                            
+                            // If no class exists, use slgb-compare-column for backwards compatibility
+                            $columnClassName = !empty($existingColumnClasses) ? $existingColumnClasses : 'slgb-compare-column';
                             
                             // Extract the title
                             $title = '';
@@ -452,14 +492,16 @@ function oh_convert_slgb_blocks() {
                             
                             // Create a core/column block with the column content
                             return sprintf(
-                                '<!-- wp:column {"className":"slgb-compare-column"} -->' . "\n" .
-                                '<div class="wp-block-column slgb-compare-column">' . "\n" .
+                                '<!-- wp:column {"className":"%s"} -->' . "\n" .
+                                '<div class="wp-block-column %s">' . "\n" .
                                 '<!-- wp:heading {"level":4} -->' . "\n" .
                                 '<h4>%s</h4>' . "\n" .
                                 '<!-- /wp:heading -->' . "\n" .
                                 '%s' . "\n" .
                                 '</div>' . "\n" .
                                 '<!-- /wp:column -->',
+                                esc_attr($columnClassName),
+                                esc_attr($columnClassName),
                                 $columnTitle,
                                 $columnBody
                             );
@@ -471,18 +513,20 @@ function oh_convert_slgb_blocks() {
                     
                     // Create a core/columns block with the converted columns
                     return sprintf(
-                        '<!-- wp:columns {"className":"slgb-compare-converted"} -->' . "\n" .
-                        '<div class="wp-block-columns slgb-compare-converted">' . "\n" .
+                        '<!-- wp:columns {"className":"%s"} -->' . "\n" .
+                        '<div class="wp-block-columns %s">' . "\n" .
                         '%s' . "\n" .
                         '</div>' . "\n" .
                         '<!-- /wp:columns -->',
+                        esc_attr($parentClassName),
+                        esc_attr($parentClassName),
                         $content
                     );
                 },
                 $updated
             );
-            
-            // Convert Quote blocks
+
+        // Convert Quote blocks - preserve original classes and fix HTML entities properly
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-quote (.*?) -->(.*?)<!-- \/wp:slgb\/p-quote -->/s',
                 function ($matches) use (&$quote_count) {
@@ -492,12 +536,18 @@ function oh_convert_slgb_blocks() {
                     // Extract the text
                     $text = '';
                     if (preg_match('/"text":"(.*?)"(?:,|})/', $attrString, $textMatch)) {
-                        // First, replace Unicode escape sequences with proper characters
+                        // First replace all possible Unicode escape sequences with proper characters
                         $escapedText = $textMatch[1];
-                        $escapedText = str_replace(['u003c', 'u003e', 'u0026'], ['<', '>', '&'], $escapedText);
                         
-                        // Then decode JSON properly
-                        $text = json_decode('"' . str_replace('"', '\\"', $escapedText) . '"');
+                        // Handle common HTML entity escapes in Unicode format
+                        $escapedText = str_replace(
+                            ['u003c', 'u003e', 'u0026', 'u0022', 'u0027', 'u003d', 'u0020'],
+                            ['<', '>', '&', '"', "'", '=', ' '],
+                            $escapedText
+                        );
+                        
+                        // Properly decode all HTML entities
+                        $text = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $escapedText) . '"'));
                     }
                     
                     // Extract the author
@@ -520,22 +570,38 @@ function oh_convert_slgb_blocks() {
                         $text = html_entity_decode($text);
                     }
                     
+                    // Extract any existing classes - preserve exactly as they are
+                    $existingClasses = [];
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = explode(' ', $classMatch[1]);
+                    }
+                    
                     $quote_count++;
                     
-                    // Add classes based on featured status
-                    $className = 'slgb-quote-converted';
-                    if ($featured) {
-                        $className .= ' is-style-large';
+                    // Create class list preserving existing classes
+                    $classNames = $existingClasses;
+                    
+                    // If no class exists, use slgb-quote for backwards compatibility
+                    if (empty($classNames)) {
+                        $classNames[] = 'slgb-quote';
                     }
+                    
+                    // Add featured style if needed
+                    if ($featured) {
+                        $classNames[] = 'is-style-large';
+                    }
+                    
+                    // Join classes and ensure no duplicates
+                    $className = implode(' ', array_unique(array_filter($classNames)));
                     
                     // Create a core/quote block with the content
                     $output = sprintf(
                         '<!-- wp:quote {"className":"%s"} -->' . "\n" .
                         '<blockquote class="wp-block-quote %s">' . "\n" .
                         '<p>%s</p>' . "\n",
-                        $className,
-                        $className,
-                        $text // Using text directly, not escaped
+                        esc_attr($className),
+                        esc_attr($className),
+                        $text // Text is already decoded properly
                     );
                     
                     // Add citation if author exists
@@ -550,13 +616,23 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert p-hints blocks to tables
+        // Convert p-hints blocks to tables - preserve original classes
             $updated = preg_replace_callback(
-                '/<\!-- wp:slgb\/p-hints -->(.*?)<!-- \/wp:slgb\/p-hints -->/s',
+                '/<\!-- wp:slgb\/p-hints (.*?)-->(.*?)<!-- \/wp:slgb\/p-hints -->/s',
                 function ($matches) use (&$hints_count) {
-                    // We'll need to keep the original HTML since it's already a table structure
-                    $content = $matches[1];
+                    $attrString = $matches[1];
+                    $content = $matches[2];
                     
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-hints for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-hints';
+                    
+                    // We'll need to keep the original HTML since it's already a table structure
                     // Extract the table content
                     if (preg_match('/<table>(.*?)<\/table>/s', $content, $tableMatch)) {
                         $tableContent = $tableMatch[1];
@@ -566,8 +642,9 @@ function oh_convert_slgb_blocks() {
                         // Create a core/html block with the table
                         return sprintf(
                             '<!-- wp:html -->' . "\n" .
-                            '<table class="slgb-hints-converted">%s</table>' . "\n" .
+                            '<table class="%s">%s</table>' . "\n" .
                             '<!-- /wp:html -->',
+                            esc_attr($className),
                             $tableContent
                         );
                     }
@@ -577,12 +654,21 @@ function oh_convert_slgb_blocks() {
                 },
                 $updated
             );
-            
-            // Convert CTA blocks
+
+        // Convert CTA blocks - preserve original classes
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-cta (.*?) \/-->/',
                 function ($matches) use (&$cta_count) {
                     $attrString = $matches[1];
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-cta for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-cta';
                     
                     // Extract the title
                     $title = '';
@@ -635,8 +721,10 @@ function oh_convert_slgb_blocks() {
                     
                     // Create a group with heading, paragraph, and buttons
                     $output = sprintf(
-                        '<!-- wp:group {"className":"slgb-cta-converted"} -->' . "\n" .
-                        '<div class="wp-block-group slgb-cta-converted">' . "\n"
+                        '<!-- wp:group {"className":"%s"} -->' . "\n" .
+                        '<div class="wp-block-group %s">' . "\n",
+                        esc_attr($className),
+                        esc_attr($className)
                     );
                     
                     // Add title if exists
@@ -697,7 +785,7 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert Miniature blocks
+        // Convert Miniature blocks - preserve original classes
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-miniature (.*?) -->(.*?)<!-- \/wp:slgb\/p-miniature -->/s',
                 function ($matches) use (&$miniature_count) {
@@ -714,6 +802,15 @@ function oh_convert_slgb_blocks() {
                     if (preg_match('/"text":"(.*?)"/', $attrString, $textMatch)) {
                         $text = json_decode('"' . str_replace('"', '\\"', $textMatch[1]) . '"');
                     }
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-miniature for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-miniature';
                     
                     if (preg_match('/"postInfo":(.*?)(,"showText"|})/', $attrString, $postInfoMatch)) {
                         try {
@@ -758,8 +855,8 @@ function oh_convert_slgb_blocks() {
                     // Create a media-text block if we have an image, otherwise just use a group
                     if (!empty($image_src)) {
                         return sprintf(
-                            '<!-- wp:media-text {"mediaLink":"%s","mediaType":"image","className":"slgb-miniature-converted"} -->' . "\n" .
-                            '<div class="wp-block-media-text alignwide is-stacked-on-mobile slgb-miniature-converted">' . 
+                            '<!-- wp:media-text {"mediaLink":"%s","mediaType":"image","className":"%s"} -->' . "\n" .
+                            '<div class="wp-block-media-text alignwide is-stacked-on-mobile %s">' . 
                             '<figure class="wp-block-media-text__media">' .
                             '<img src="%s" alt="%s"/>' .
                             '</figure>' .
@@ -773,6 +870,8 @@ function oh_convert_slgb_blocks() {
                             '</div></div>' . "\n" .
                             '<!-- /wp:media-text -->',
                             esc_url($post_link),
+                            esc_attr($className),
+                            esc_attr($className),
                             esc_url($image_src),
                             esc_attr($post_title),
                             esc_url($post_link),
@@ -781,8 +880,8 @@ function oh_convert_slgb_blocks() {
                         );
                     } else {
                         return sprintf(
-                            '<!-- wp:group {"className":"slgb-miniature-converted"} -->' . "\n" .
-                            '<div class="wp-block-group slgb-miniature-converted">' . "\n" .
+                            '<!-- wp:group {"className":"%s"} -->' . "\n" .
+                            '<div class="wp-block-group %s">' . "\n" .
                             '<!-- wp:heading {"level":3} -->' . "\n" .
                             '<h3><a href="%s">%s</a></h3>' . "\n" .
                             '<!-- /wp:heading -->' . "\n\n" .
@@ -791,6 +890,8 @@ function oh_convert_slgb_blocks() {
                             '<!-- /wp:paragraph -->' . "\n" .
                             '</div>' . "\n" .
                             '<!-- /wp:group -->',
+                            esc_attr($className),
+                            esc_attr($className),
                             esc_url($post_link),
                             esc_html($post_title),
                             esc_html($text)
@@ -800,11 +901,21 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
             
-            // Convert gb-emph blocks
+            // Convert gb-emph blocks - preserve original classes
             $updated = preg_replace_callback(
-                '/<\!-- wp:slgb\/gb-emph -->(.*?)<!-- \/wp:slgb\/gb-emph -->/s',
+                '/<\!-- wp:slgb\/gb-emph (.*?)-->(.*?)<!-- \/wp:slgb\/gb-emph -->/s',
                 function ($matches) use (&$gb_emph_count) {
-                    $content = $matches[1];
+                    $attrString = $matches[1];
+                    $content = $matches[2];
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-gb-emph for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-gb-emph';
                     
                     // Extract the content from inside the div
                     if (preg_match('/<div class="gb-emph">(.*?)<\/div>/s', $content, $divMatch)) {
@@ -813,11 +924,13 @@ function oh_convert_slgb_blocks() {
                         
                         // Create a group with the content and a custom class
                         return sprintf(
-                            '<!-- wp:group {"className":"slgb-gb-emph-converted"} -->' . "\n" .
-                            '<div class="wp-block-group slgb-gb-emph-converted">' . "\n" .
+                            '<!-- wp:group {"className":"%s"} -->' . "\n" .
+                            '<div class="wp-block-group %s">' . "\n" .
                             '%s' . "\n" .
                             '</div>' . "\n" .
                             '<!-- /wp:group -->',
+                            esc_attr($className),
+                            esc_attr($className),
                             $divContent
                         );
                     }
@@ -859,8 +972,8 @@ function oh_convert_slgb_blocks() {
             if ($emph_count > 0) {
                 echo sprintf('<li>%d emphasis blocks</li>', $emph_count);
             }
-
-                   if ($image_count > 0) {
+            
+            if ($image_count > 0) {
                 echo sprintf('<li>%d image blocks</li>', $image_count);
             }
             
@@ -942,23 +1055,23 @@ function oh_render_slgb_converter_page() {
                 <li><code>slgb/gb-cta</code> → <code>core/group</code> with heading and buttons</li>
                 <li><code>slgb/gb-emph</code> → <code>core/group</code> with preserved content</li>
             </ul>
-            <p><strong>CSS Classes Preserved:</strong> The plugin maintains all custom CSS classes from your original blocks and adds conversion-specific classes to help with styling.</p>
+            <p><strong>CSS Classes Preserved:</strong> The plugin maintains all custom CSS classes from your original blocks to ensure your styling continues to work correctly.</p>
             <p><strong>Important:</strong> Always back up your database before running this conversion.</p>
         </div>
         
         <div class="card" style="max-width: 800px; margin-bottom: 20px; padding: 20px; background-color: #f8f9fa;">
             <h3>CSS Styling Help</h3>
-            <p>After conversion, you may need to add custom CSS to your theme to maintain the original appearance. The following classes are added to converted blocks:</p>
+            <p>If you need to add CSS styling, the following classes are commonly used in the converted blocks:</p>
             <ul style="list-style-type: disc; margin-left: 20px;">
-                <li><code>slgb-table-converted</code> - For converted tables</li>
-                <li><code>slgb-subscribe-converted</code> - For subscribe forms</li>
-                <li><code>slgb-compare-converted</code> - For comparison blocks</li>
+                <li><code>slgb-table</code> - For converted tables</li>
+                <li><code>slgb-subscribe</code> - For subscribe forms</li>
+                <li><code>slgb-compare</code> - For comparison blocks</li>
                 <li><code>slgb-compare-column</code> - For columns within compare blocks</li>
-                <li><code>slgb-hints-converted</code> - For hint tables</li>
-                <li><code>slgb-quote-converted</code> - For quotes</li>
-                <li><code>slgb-miniature-converted</code> - For miniature post blocks</li>
-                <li><code>slgb-cta-converted</code> - For CTA blocks</li>
-                <li><code>slgb-gb-emph-converted</code> - For emphasis blocks</li>
+                <li><code>slgb-hints</code> - For hint tables</li>
+                <li><code>slgb-quote</code> - For quotes</li>
+                <li><code>slgb-miniature</code> - For miniature post blocks</li>
+                <li><code>slgb-cta</code> - For CTA blocks</li>
+                <li><code>slgb-gb-emph</code> - For emphasis blocks</li>
                 <li><code>slgb-emph</code> - For regular emphasis blocks</li>
             </ul>
         </div>
@@ -986,3 +1099,95 @@ function oh_slgb_plugin_action_links($links) {
     return $links;
 }
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');
+
+/**
+ * Add custom CSS for converted blocks
+ */
+function oh_add_conversion_css() {
+    ?>
+    <style>
+        /* Basic styling for converted blocks */
+        .slgb-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1.5em;
+        }
+        
+        .slgb-table th, 
+        .slgb-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .slgb-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .slgb-subscribe {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 1.5em 0;
+        }
+        
+        .slgb-compare {
+            margin: 1.5em 0;
+        }
+        
+        .slgb-compare-column {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .slgb-hints {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1.5em;
+        }
+        
+        .slgb-hints th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        
+        .slgb-hints td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            vertical-align: top;
+        }
+        
+        .slgb-quote {
+            font-style: italic;
+            border-left: 4px solid #888;
+            padding-left: 1em;
+        }
+        
+        .slgb-cta {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 1.5em 0;
+        }
+        
+        .slgb-gb-emph,
+        .slgb-emph {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #0073aa;
+            margin: 1.5em 0;
+        }
+        
+        .slgb-miniature {
+            margin: 1.5em 0;
+        }
+    </style>
+    <?php
+}
+add_action('wp_head', 'oh_add_conversion_css');

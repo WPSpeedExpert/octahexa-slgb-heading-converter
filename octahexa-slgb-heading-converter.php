@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.1.0
+ * Version:           2.2.0
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -19,7 +19,41 @@
 if (!defined('ABSPATH')) exit;
 
 /**
- * Run the conversion when triggered via admin URL param.
+ * Table of Contents
+ * 
+ * 1. Main Conversion Function
+ *   1.1. Original Block Type Handlers
+ *     1.1.1. Heading Block Conversion
+ *     1.1.2. Emphasis Block Conversion
+ *     1.1.3. Image Block Conversion
+ *     1.1.4. Table Block Conversion
+ *     1.1.5. Subscribe Block Conversion
+ *     1.1.6. Compare Block Conversion
+ *     1.1.7. Hints Block Conversion
+ *     1.1.8. Quote Block Conversion
+ *     1.1.9. Miniature Block Conversion
+ *     1.1.10. CTA Block Conversion
+ *     1.1.11. GB Emphasis Block Conversion
+ *   1.2. New Block Type Handlers
+ *     1.2.1. Postimage Block Conversion
+ *     1.2.2. Dos-Donts Block Conversion
+ *     1.2.3. YouTube Block Conversion
+ *     1.2.4. P-YouTube Block Conversion
+ *     1.2.5. P-Btns Block Conversion
+ *     1.2.6. Post-Quote Block Conversion
+ *     1.2.7. P-Hints-Row and P-Hints-Cell Block Conversion
+ *     1.2.8. P-Comparison and P-Comparison-Row Block Conversion
+ *   1.3. Conversion Results Display
+ * 2. Admin Interface
+ *   2.1. Register Admin Page
+ *   2.2. Render Admin Page UI
+ * 3. Plugin Actions and Styles
+ *   3.1. Add Plugin Settings Link
+ *   3.2. Add Custom CSS for Converted Blocks
+ */
+
+/**
+ * 1. Main Conversion Function
  */
 function oh_convert_slgb_blocks() {
     if (!current_user_can('manage_options')) return;
@@ -44,12 +78,28 @@ function oh_convert_slgb_blocks() {
         $miniature_count = 0;
         $cta_count = 0;
         $gb_emph_count = 0;
+        
+        // New block type counters
+        $postimage_count = 0;
+        $dosdont_count = 0;
+        $youtube_count = 0;
+        $pytube_count = 0;
+        $pbtns_count = 0;
+        $post_quote_count = 0;
+        $p_hints_count = 0;
+        $p_comparison_count = 0;
 
         foreach ($posts as $post) {
             $original = $post->post_content;
             $updated = $original;
 
-        // Convert heading blocks
+        /**
+         * 1.1. Original Block Type Handlers
+         */
+            
+        /**
+         * 1.1.1. Heading Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/h([1-6]) (.*?) \/-->/',
                 function ($matches) use (&$heading_count) {
@@ -79,7 +129,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
             
-            // Convert emphasis blocks - preserve original classes exactly
+        /**
+         * 1.1.2. Emphasis Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/emph (.*?) \/-->/',
                 function ($matches) use (&$emph_count) {
@@ -122,7 +174,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert image blocks
+        /**
+         * 1.1.3. Image Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<!-- wp:slgb\/image (.*?) -->\s*<img (.*?)\/>\s*<!-- \/wp:slgb\/image -->/',
                 function ($matches) use (&$image_count) {
@@ -235,7 +289,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert table blocks - preserve original classes
+        /**
+         * 1.1.4. Table Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/table (.*?) \/-->/',
                 function ($matches) use (&$table_count) {
@@ -396,7 +452,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert gb-subscribe blocks to paragraphs with a form button - preserve original classes
+        /**
+         * 1.1.5. Subscribe Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-subscribe (.*?) \/-->/',
                 function ($matches) use (&$subscribe_count) {
@@ -443,7 +501,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
             
-            // Convert Compare blocks - preserve original classes
+        /**
+         * 1.1.6. Compare Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-compare (.*?)-->(.*?)<!-- \/wp:slgb\/p-compare -->/s',
                 function ($matches) use (&$compare_count) {
@@ -526,7 +586,50 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert Quote blocks - preserve original classes and fix HTML entities properly
+        /**
+         * 1.1.7. Hints Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-hints (.*?)-->(.*?)<!-- \/wp:slgb\/p-hints -->/s',
+                function ($matches) use (&$hints_count) {
+                    $attrString = $matches[1];
+                    $content = $matches[2];
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // If no class exists, use slgb-hints for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-hints';
+                    
+                    // We'll need to keep the original HTML since it's already a table structure
+                    // Extract the table content
+                    if (preg_match('/<table>(.*?)<\/table>/s', $content, $tableMatch)) {
+                        $tableContent = $tableMatch[1];
+                        
+                        $hints_count++;
+                        
+                        // Create a core/html block with the table
+                        return sprintf(
+                            '<!-- wp:html -->' . "\n" .
+                            '<table class="%s">%s</table>' . "\n" .
+                            '<!-- /wp:html -->',
+                            esc_attr($className),
+                            $tableContent
+                        );
+                    }
+                    
+                    // If extraction fails, return the original
+                    return $matches[0];
+                },
+                $updated
+            );
+
+        /**
+         * 1.1.8. Quote Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-quote (.*?) -->(.*?)<!-- \/wp:slgb\/p-quote -->/s',
                 function ($matches) use (&$quote_count) {
@@ -562,7 +665,7 @@ function oh_convert_slgb_blocks() {
                         $featured = $featuredMatch[1] === 'true';
                     }
                     
-                    // Extract content from blockquote if available and text is empty
+// Extract content from blockquote if available and text is empty
                     if (empty($text) && preg_match('/<blockquote><p>(.*?)<\/p><\/blockquote>/s', $content, $contentMatch)) {
                         $text = $contentMatch[1];
                         
@@ -616,12 +719,25 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert p-hints blocks to tables - preserve original classes
+        /**
+         * 1.1.9. Miniature Block Conversion
+         */
             $updated = preg_replace_callback(
-                '/<\!-- wp:slgb\/p-hints (.*?)-->(.*?)<!-- \/wp:slgb\/p-hints -->/s',
-                function ($matches) use (&$hints_count) {
+                '/<\!-- wp:slgb\/p-miniature (.*?) -->(.*?)<!-- \/wp:slgb\/p-miniature -->/s',
+                function ($matches) use (&$miniature_count) {
                     $attrString = $matches[1];
                     $content = $matches[2];
+                    
+                    // Extract the post info
+                    $postInfo = null;
+                    $text = '';
+                    $image_src = '';
+                    $post_title = '';
+                    $post_link = '';
+                    
+                    if (preg_match('/"text":"(.*?)"/', $attrString, $textMatch)) {
+                        $text = json_decode('"' . str_replace('"', '\\"', $textMatch[1]) . '"');
+                    }
                     
                     // Extract existing classes - preserve exactly as they are
                     $existingClasses = '';
@@ -629,33 +745,101 @@ function oh_convert_slgb_blocks() {
                         $existingClasses = $classMatch[1];
                     }
                     
-                    // If no class exists, use slgb-hints for backwards compatibility
-                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-hints';
+                    // If no class exists, use slgb-miniature for backwards compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-miniature';
                     
-                    // We'll need to keep the original HTML since it's already a table structure
-                    // Extract the table content
-                    if (preg_match('/<table>(.*?)<\/table>/s', $content, $tableMatch)) {
-                        $tableContent = $tableMatch[1];
-                        
-                        $hints_count++;
-                        
-                        // Create a core/html block with the table
-                        return sprintf(
-                            '<!-- wp:html -->' . "\n" .
-                            '<table class="%s">%s</table>' . "\n" .
-                            '<!-- /wp:html -->',
-                            esc_attr($className),
-                            $tableContent
-                        );
+                    if (preg_match('/"postInfo":(.*?)(,"showText"|})/', $attrString, $postInfoMatch)) {
+                        try {
+                            $postInfoJson = $postInfoMatch[1];
+                            // Fix JSON if needed
+                            $postInfoJson = preg_replace('/([{,])(\s*)([a-zA-Z0-9_]+)(\s*):/','$1"$3":', $postInfoJson);
+                            $postInfo = json_decode($postInfoJson, true);
+                            
+                            if (is_array($postInfo)) {
+                                if (isset($postInfo['title'])) {
+                                    $post_title = $postInfo['title'];
+                                }
+                                
+                                if (isset($postInfo['link'])) {
+                                    $post_link = $postInfo['link'];
+                                }
+                                
+                                if (isset($postInfo['img']) && isset($postInfo['img']['src'])) {
+                                    $image_src = $postInfo['img']['src'];
+                                }
+                            }
+                        } catch (Exception $e) {
+                            // If JSON parsing fails, we'll try to extract from the HTML instead
+                        }
                     }
                     
-                    // If extraction fails, return the original
-                    return $matches[0];
+                    // If we couldn't extract from JSON, try to extract from the HTML
+                    if (empty($image_src) && preg_match('/<img src="([^"]*)"/', $content, $imgMatch)) {
+                        $image_src = $imgMatch[1];
+                    }
+                    
+                    if (empty($post_title) && preg_match('/<strong>(.*?)<\/strong>/', $content, $titleMatch)) {
+                        $post_title = $titleMatch[1];
+                    }
+                    
+                    if (empty($post_link) && preg_match('/<a href="([^"]*)"[^>]*><strong>/', $content, $linkMatch)) {
+                        $post_link = $linkMatch[1];
+                    }
+                    
+                    $miniature_count++;
+                    
+                    // Create a media-text block if we have an image, otherwise just use a group
+                    if (!empty($image_src)) {
+                        return sprintf(
+                            '<!-- wp:media-text {"mediaLink":"%s","mediaType":"image","className":"%s"} -->' . "\n" .
+                            '<div class="wp-block-media-text alignwide is-stacked-on-mobile %s">' . 
+                            '<figure class="wp-block-media-text__media">' .
+                            '<img src="%s" alt="%s"/>' .
+                            '</figure>' .
+                            '<div class="wp-block-media-text__content">' . 
+                            '<!-- wp:heading {"level":3} -->' . "\n" .
+                            '<h3><a href="%s">%s</a></h3>' . "\n" .
+                            '<!-- /wp:heading -->' . "\n\n" .
+                            '<!-- wp:paragraph -->' . "\n" .
+                            '<p>%s</p>' . "\n" .
+                            '<!-- /wp:paragraph -->' . "\n" .
+                            '</div></div>' . "\n" .
+                            '<!-- /wp:media-text -->',
+                            esc_url($post_link),
+                            esc_attr($className),
+                            esc_attr($className),
+                            esc_url($image_src),
+                            esc_attr($post_title),
+                            esc_url($post_link),
+                            esc_html($post_title),
+                            esc_html($text)
+                        );
+                    } else {
+                        return sprintf(
+                            '<!-- wp:group {"className":"%s"} -->' . "\n" .
+                            '<div class="wp-block-group %s">' . "\n" .
+                            '<!-- wp:heading {"level":3} -->' . "\n" .
+                            '<h3><a href="%s">%s</a></h3>' . "\n" .
+                            '<!-- /wp:heading -->' . "\n\n" .
+                            '<!-- wp:paragraph -->' . "\n" .
+                            '<p>%s</p>' . "\n" .
+                            '<!-- /wp:paragraph -->' . "\n" .
+                            '</div>' . "\n" .
+                            '<!-- /wp:group -->',
+                            esc_attr($className),
+                            esc_attr($className),
+                            esc_url($post_link),
+                            esc_html($post_title),
+                            esc_html($text)
+                        );
+                    }
                 },
                 $updated
             );
-
-        // Convert CTA blocks - preserve original classes
+            
+        /**
+         * 1.1.10. CTA Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-cta (.*?) \/-->/',
                 function ($matches) use (&$cta_count) {
@@ -785,123 +969,9 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
-        // Convert Miniature blocks - preserve original classes
-            $updated = preg_replace_callback(
-                '/<\!-- wp:slgb\/p-miniature (.*?) -->(.*?)<!-- \/wp:slgb\/p-miniature -->/s',
-                function ($matches) use (&$miniature_count) {
-                    $attrString = $matches[1];
-                    $content = $matches[2];
-                    
-                    // Extract the post info
-                    $postInfo = null;
-                    $text = '';
-                    $image_src = '';
-                    $post_title = '';
-                    $post_link = '';
-                    
-                    if (preg_match('/"text":"(.*?)"/', $attrString, $textMatch)) {
-                        $text = json_decode('"' . str_replace('"', '\\"', $textMatch[1]) . '"');
-                    }
-                    
-                    // Extract existing classes - preserve exactly as they are
-                    $existingClasses = '';
-                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
-                        $existingClasses = $classMatch[1];
-                    }
-                    
-                    // If no class exists, use slgb-miniature for backwards compatibility
-                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-miniature';
-                    
-                    if (preg_match('/"postInfo":(.*?)(,"showText"|})/', $attrString, $postInfoMatch)) {
-                        try {
-                            $postInfoJson = $postInfoMatch[1];
-                            // Fix JSON if needed
-                            $postInfoJson = preg_replace('/([{,])(\s*)([a-zA-Z0-9_]+)(\s*):/','$1"$3":', $postInfoJson);
-                            $postInfo = json_decode($postInfoJson, true);
-                            
-                            if (is_array($postInfo)) {
-                                if (isset($postInfo['title'])) {
-                                    $post_title = $postInfo['title'];
-                                }
-                                
-                                if (isset($postInfo['link'])) {
-                                    $post_link = $postInfo['link'];
-                                }
-                                
-                                if (isset($postInfo['img']) && isset($postInfo['img']['src'])) {
-                                    $image_src = $postInfo['img']['src'];
-                                }
-                            }
-                        } catch (Exception $e) {
-                            // If JSON parsing fails, we'll try to extract from the HTML instead
-                        }
-                    }
-                    
-                    // If we couldn't extract from JSON, try to extract from the HTML
-                    if (empty($image_src) && preg_match('/<img src="([^"]*)"/', $content, $imgMatch)) {
-                        $image_src = $imgMatch[1];
-                    }
-                    
-                    if (empty($post_title) && preg_match('/<strong>(.*?)<\/strong>/', $content, $titleMatch)) {
-                        $post_title = $titleMatch[1];
-                    }
-                    
-                    if (empty($post_link) && preg_match('/<a href="([^"]*)"[^>]*><strong>/', $content, $linkMatch)) {
-                        $post_link = $linkMatch[1];
-                    }
-                    
-                    $miniature_count++;
-                    
-                    // Create a media-text block if we have an image, otherwise just use a group
-                    if (!empty($image_src)) {
-                        return sprintf(
-                            '<!-- wp:media-text {"mediaLink":"%s","mediaType":"image","className":"%s"} -->' . "\n" .
-                            '<div class="wp-block-media-text alignwide is-stacked-on-mobile %s">' . 
-                            '<figure class="wp-block-media-text__media">' .
-                            '<img src="%s" alt="%s"/>' .
-                            '</figure>' .
-                            '<div class="wp-block-media-text__content">' . 
-                            '<!-- wp:heading {"level":3} -->' . "\n" .
-                            '<h3><a href="%s">%s</a></h3>' . "\n" .
-                            '<!-- /wp:heading -->' . "\n\n" .
-                            '<!-- wp:paragraph -->' . "\n" .
-                            '<p>%s</p>' . "\n" .
-                            '<!-- /wp:paragraph -->' . "\n" .
-                            '</div></div>' . "\n" .
-                            '<!-- /wp:media-text -->',
-                            esc_url($post_link),
-                            esc_attr($className),
-                            esc_attr($className),
-                            esc_url($image_src),
-                            esc_attr($post_title),
-                            esc_url($post_link),
-                            esc_html($post_title),
-                            esc_html($text)
-                        );
-                    } else {
-                        return sprintf(
-                            '<!-- wp:group {"className":"%s"} -->' . "\n" .
-                            '<div class="wp-block-group %s">' . "\n" .
-                            '<!-- wp:heading {"level":3} -->' . "\n" .
-                            '<h3><a href="%s">%s</a></h3>' . "\n" .
-                            '<!-- /wp:heading -->' . "\n\n" .
-                            '<!-- wp:paragraph -->' . "\n" .
-                            '<p>%s</p>' . "\n" .
-                            '<!-- /wp:paragraph -->' . "\n" .
-                            '</div>' . "\n" .
-                            '<!-- /wp:group -->',
-                            esc_attr($className),
-                            esc_attr($className),
-                            esc_url($post_link),
-                            esc_html($post_title),
-                            esc_html($text)
-                        );
-                    }
-                },
-                $updated
-            );
-            
-            // Convert gb-emph blocks - preserve original classes
+        /**
+         * 1.1.11. GB Emphasis Block Conversion
+         */
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/gb-emph (.*?)-->(.*?)<!-- \/wp:slgb\/gb-emph -->/s',
                 function ($matches) use (&$gb_emph_count) {
@@ -941,6 +1011,499 @@ function oh_convert_slgb_blocks() {
                 $updated
             );
 
+        /**
+         * 1.2. New Block Type Handlers
+         */
+
+        /**
+         * 1.2.1. Postimage Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/postimage (.*?) \/-->/',
+                function ($matches) use (&$postimage_count) {
+                    $attrString = $matches[1];
+                    
+                    // Extract the required attributes
+                    preg_match('/"id":"(\d+)"/', $attrString, $idMatch);
+                    preg_match('/"url":"([^"]*)"/', $attrString, $urlMatch);
+                    preg_match('/"alt":"([^"]*)"/', $attrString, $altMatch);
+                    preg_match('/"width":"([^"]*)"/', $attrString, $widthMatch);
+                    preg_match('/"height":"([^"]*)"/', $attrString, $heightMatch);
+                    
+                    // Check if we have the necessary data
+                    if (!empty($urlMatch)) {
+                        $id = !empty($idMatch) ? (int)$idMatch[1] : 0;
+                        $url = $urlMatch[1];
+                        $alt = !empty($altMatch) ? json_decode('"' . $altMatch[1] . '"') : '';
+                        $width = !empty($widthMatch) ? (int)$widthMatch[1] : 0;
+                        $height = !empty($heightMatch) ? (int)$heightMatch[1] : 0;
+                        
+                        // Extract any existing classes - preserve exactly as they are
+                        $className = '';
+                        if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                            $className = $classMatch[1];
+                        }
+                        
+                        $postimage_count++;
+                        
+                        // Convert to core/image block
+                        $blockAttrs = array(
+                            'id' => $id,
+                            'sizeSlug' => 'full',
+                        );
+                        
+                        if (!empty($className)) {
+                            $blockAttrs['className'] = $className;
+                        }
+                        
+                        if (!empty($width) && !empty($height)) {
+                            $blockAttrs['width'] = $width;
+                            $blockAttrs['height'] = $height;
+                        }
+                        
+                        $blockAttrString = json_encode($blockAttrs);
+                        
+                        return sprintf(
+                            '<!-- wp:image %s --><figure class="wp-block-image size-full"><img src="%s" alt="%s" class="wp-image-%d"%s/></figure><!-- /wp:image -->',
+                            $blockAttrString,
+                            esc_url($url),
+                            esc_attr($alt),
+                            $id,
+                            !empty($width) && !empty($height) ? sprintf(' width="%d" height="%d"', $width, $height) : ''
+                        );
+                    }
+                    
+                    // If we can't extract the necessary data, return the original
+                    return $matches[0];
+                },
+                $updated
+            );
+            
+        /**
+         * 1.2.2. Dos-Donts Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/dos-donts (.*?) \/-->/',
+                function ($matches) use (&$dosdont_count) {
+                    $attrString = $matches[1];
+                    
+                    // Extract existing classes - preserve exactly
+                    $existingClasses = '';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $existingClasses = $classMatch[1];
+                    }
+                    
+                    // Default class if none exists
+                    $className = !empty($existingClasses) ? $existingClasses : 'slgb-dosdont';
+                    
+                    // Try to extract the cells data
+                    if (preg_match('/"cells":"(.*?)"/', $attrString, $cellsMatch)) {
+                        try {
+                            // Replace unicode escape sequences with actual characters
+                            $processedJson = str_replace(['u0022', 'u003c', 'u003e', 'u003d'], ['"', '<', '>', '='], $cellsMatch[1]);
+                            
+                            // Double decode to handle escaped JSON
+                            $processedJson = json_decode('"' . $processedJson . '"');
+                            $cells = json_decode($processedJson, true);
+                            
+                            if (is_array($cells)) {
+                                // Build an HTML table
+                                $tableHtml = '<table class="' . esc_attr($className) . '"><thead><tr>' . 
+                                             '<th>DOs</th><th>DON\'Ts</th>' . 
+                                             '</tr></thead><tbody>';
+                                
+                                foreach ($cells as $row) {
+                                    $do = isset($row['do']) ? $row['do'] : '';
+                                    $dont = isset($row['dont']) ? $row['dont'] : '';
+                                    
+                                    $tableHtml .= sprintf(
+                                        '<tr><td>%s</td><td>%s</td></tr>',
+                                        $do,
+                                        $dont
+                                    );
+                                }
+                                
+                                $tableHtml .= '</tbody></table>';
+                                $dosdont_count++;
+                                
+                                // Create a core/html block with the table
+                                return sprintf(
+                                    '<!-- wp:html -->' . "\n" . '%s' . "\n" . '<!-- /wp:html -->',
+                                    $tableHtml
+                                );
+                            }
+                        } catch (Exception $e) {
+                            // Log error for debugging
+                            error_log('SLGB DosDonts Conversion Error: ' . $e->getMessage());
+                        }
+                    }
+                    
+                    // If extraction fails, return the original
+                    return $matches[0];
+                },
+                $updated
+            );
+            
+        /**
+         * 1.2.3. YouTube Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/youtube (.*?) \/-->/',
+                function ($matches) use (&$youtube_count) {
+                    $attrString = $matches[1];
+                    
+                    // Extract the src URL
+                    preg_match('/"src":"([^"]*)"/', $attrString, $srcMatch);
+                    
+                    if (!empty($srcMatch)) {
+                        $src = $srcMatch[1];
+                        $youtube_count++;
+                        
+                        // Convert to core/embed YouTube block
+                        return sprintf(
+                            '<!-- wp:embed {"url":"%s","type":"rich","providerNameSlug":"youtube","responsive":true,"className":"wp-embed-aspect-16-9 wp-has-aspect-ratio"} -->' . 
+                            '<figure class="wp-block-embed is-type-rich is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">' . 
+                            '<div class="wp-block-embed__wrapper">%s</div></figure>' . 
+                            '<!-- /wp:embed -->',
+                            esc_url($src),
+                            esc_url($src)
+                        );
+                    }
+                    
+                    // If extraction fails, return the original
+                    return $matches[0];
+                },
+                $updated
+            );
+            
+        /**
+         * 1.2.4. P-YouTube Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-youtube (.*?) -->(.*?)<!-- \/wp:slgb\/p-youtube -->/s',
+                function ($matches) use (&$pytube_count) {
+                    $attrString = $matches[1];
+                    $content = $matches[2];
+                    
+                    // Extract title and src
+                    preg_match('/"title":"([^"]*)"/', $attrString, $titleMatch);
+                    preg_match('/"src":"([^"]*)"/', $attrString, $srcMatch);
+                    
+                    // Alternatively try to extract from the iframe if available
+                    if (empty($srcMatch) && preg_match('/src="([^"]*)"/', $content, $iframeSrcMatch)) {
+                        $src = $iframeSrcMatch[1];
+                    } else if (!empty($srcMatch)) {
+                        $src = $srcMatch[1];
+                    } else {
+                        // If we can't extract the source, return the original
+                        return $matches[0];
+                    }
+                    
+                    $title = !empty($titleMatch) ? json_decode('"' . $titleMatch[1] . '"') : '';
+                    
+                    $pytube_count++;
+                    
+                    // Convert to core/embed YouTube block with figure caption if title available
+                    $embed = sprintf(
+                        '<!-- wp:embed {"url":"%s","type":"rich","providerNameSlug":"youtube","responsive":true,"className":"wp-embed-aspect-16-9 wp-has-aspect-ratio"} -->' . 
+                        '<figure class="wp-block-embed is-type-rich is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">' . 
+                        '<div class="wp-block-embed__wrapper">%s</div>',
+                        esc_url($src),
+                        esc_url($src)
+                    );
+                    
+                    // Add caption if title exists
+                    if (!empty($title)) {
+                        $embed .= sprintf(
+                            '<figcaption class="wp-element-caption">%s</figcaption>',
+                            esc_html($title)
+                        );
+                    }
+                    
+                    $embed .= '</figure>' . '<!-- /wp:embed -->';
+                    
+                    return $embed;
+                },
+                $updated
+            );
+            
+        /**
+         * 1.2.5. P-Btns Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-btns -->(.*?)<!-- \/wp:slgb\/p-btns -->/s',
+                function ($matches) use (&$pbtns_count) {
+                    $content = $matches[1];
+                    
+                    // Extract link URL and target from the content
+                    preg_match('/<a href="([^"]*)"([^>]*)>/', $content, $linkMatch);
+                    
+                    if (!empty($linkMatch)) {
+                        $url = $linkMatch[1];
+                        $attributes = $linkMatch[2];
+                        $isNewTab = strpos($attributes, 'target="_blank"') !== false;
+                        
+                        $pbtns_count++;
+                        
+                        // Create button block
+                        $buttonAttrs = array(
+                            'url' => $url,
+                        );
+                        
+                        if ($isNewTab) {
+                            $buttonAttrs['opensInNewTab'] = true;
+                        }
+                        
+                        // Find any button text
+                        $buttonText = 'Click Here'; // Default text
+                        if (preg_match('/<a[^>]*>(.*?)<\/a>/', $content, $textMatch)) {
+                            if (!empty($textMatch[1])) {
+                                $buttonText = $textMatch[1];
+                            }
+                        }
+                        
+                        return sprintf(
+                            '<!-- wp:buttons -->' . "\n" .
+                            '<div class="wp-block-buttons">' . "\n" .
+                            '<!-- wp:button %s -->' . "\n" .
+                            '<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="%s"%s>%s</a></div>' . "\n" .
+                            '<!-- /wp:button -->' . "\n" .
+                            '</div>' . "\n" .
+                            '<!-- /wp:buttons -->',
+                            json_encode($buttonAttrs),
+                            esc_url($url),
+                            $isNewTab ? ' target="_blank" rel="noreferrer noopener"' : '',
+                            $buttonText
+                        );
+                    }
+                    
+                    // If extraction fails, fall back to a simple button
+                    $pbtns_count++;
+                    return '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-fill"} --><div class="wp-block-button is-style-fill"><a class="wp-block-button__link wp-element-button">Button</a></div><!-- /wp:button --></div><!-- /wp:buttons -->';
+                },
+                $updated
+            );
+
+        /**
+         * 1.2.6. Post-Quote Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/post-quote (.*?) -->(.*?)<!-- \/wp:slgb\/post-quote -->/s',
+                function ($matches) use (&$post_quote_count) {
+                    $attrString = $matches[1];
+                    $content = isset($matches[2]) ? $matches[2] : '';
+                    
+                    // Extract featured status
+                    $featured = false;
+                    if (preg_match('/"featured":(true|false)/', $attrString, $featuredMatch)) {
+                        $featured = $featuredMatch[1] === 'true';
+                    }
+                    
+                    // Extract quote content
+                    $quote_text = '';
+                    if (preg_match('/"content":"(.*?)"(?:,|})/s', $attrString, $contentMatch)) {
+                        // Decode unicode and HTML entities
+                        $encodedContent = $contentMatch[1];
+                        $encodedContent = str_replace(['u003c', 'u003e', 'u0026', 'u0022', 'u003d', 'u0020'], 
+                                                    ['<', '>', '&', '"', '=', ' '], 
+                                                    $encodedContent);
+                        $quote_text = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $encodedContent) . '"'));
+                    } else if (!empty($content)) {
+                        $quote_text = $content;
+                    }
+                    
+                    // Extract author
+                    $author = '';
+                    if (preg_match('/"author":"(.*?)"/', $attrString, $authorMatch)) {
+                        $author = json_decode('"' . $authorMatch[1] . '"');
+                    }
+                    
+                    // Extract CSS classes
+                    $className = 'slgb-post-quote';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $className = $classMatch[1];
+                    }
+                    
+                    // Add featured style if needed
+                    $styles = [];
+                    if ($featured) {
+                        $styles[] = 'is-style-large';
+                    }
+                    
+// Create class attribute with all classes
+                    $classNames = array_merge([$className], $styles);
+                    $classAttr = implode(' ', array_unique(array_filter($classNames)));
+                    
+                    $post_quote_count++;
+                    
+                    // Create a core/quote block
+                    $output = sprintf(
+                        '<!-- wp:quote {"className":"%s"} -->' . "\n" .
+                        '<blockquote class="wp-block-quote %s">' . "\n" .
+                        '<p>%s</p>' . "\n",
+                        esc_attr($classAttr),
+                        esc_attr($classAttr),
+                        $quote_text
+                    );
+                    
+                    // Add citation if author exists
+                    if (!empty($author)) {
+                        $output .= sprintf('<cite>%s</cite>' . "\n", esc_html($author));
+                    }
+                    
+                    $output .= '</blockquote>' . "\n" . '<!-- /wp:quote -->';
+                    
+                    return $output;
+                },
+                $updated
+            );
+
+        /**
+         * 1.2.7. P-Hints-Row and P-Hints-Cell Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-hints-row -->(.*?)<!-- \/wp:slgb\/p-hints-row -->/s',
+                function ($matches) use (&$p_hints_count) {
+                    $content = $matches[1];
+                    
+                    // Extract cells data - p-hints-cell blocks are nested in p-hints-row
+                    preg_match_all('/<\!-- wp:slgb\/p-hints-cell -->(.*?)<!-- \/wp:slgb\/p-hints-cell -->/s', $content, $cellMatches);
+                    
+                    if (!empty($cellMatches[1])) {
+                        $cellContents = $cellMatches[1];
+                        
+                        // Convert to a table row
+                        $rowHtml = '<tr>';
+                        foreach ($cellContents as $cellContent) {
+                            $rowHtml .= sprintf('<td>%s</td>', trim($cellContent));
+                        }
+                        $rowHtml .= '</tr>';
+                        
+                        $p_hints_count++;
+                        
+                        return $rowHtml;
+                    }
+                    
+                    // If extraction fails, return the original content in a single row
+                    $p_hints_count++;
+                    return '<tr><td>' . $content . '</td></tr>';
+                },
+                $updated
+            );
+
+        /**
+         * 1.2.8. P-Comparison and P-Comparison-Row Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-comparison (.*?) -->(.*?)<!-- \/wp:slgb\/p-comparison -->/s',
+                function ($matches) use (&$p_comparison_count) {
+                    $attrString = $matches[1];
+                    $content = $matches[2];
+                    
+                    // Extract column titles
+                    $leftColumnTitle = '';
+                    $rightColumnTitle = '';
+                    
+                    if (preg_match('/"leftColumnTitle":"(.*?)"/', $attrString, $leftTitleMatch)) {
+                        $leftTitle = $leftTitleMatch[1];
+                        // Handle HTML entity decoding
+                        $leftColumnTitle = str_replace(['u003c', 'u003e', 'u0026', 'u0022'], ['<', '>', '&', '"'], $leftTitle);
+                        $leftColumnTitle = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $leftColumnTitle) . '"'));
+                    }
+                    
+                    if (preg_match('/"rightColumnTitle":"(.*?)"/', $attrString, $rightTitleMatch)) {
+                        $rightTitle = $rightTitleMatch[1];
+                        // Handle HTML entity decoding
+                        $rightColumnTitle = str_replace(['u003c', 'u003e', 'u0026', 'u0022'], ['<', '>', '&', '"'], $rightTitle);
+                        $rightColumnTitle = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $rightColumnTitle) . '"'));
+                    }
+                    
+                    // Extract existing classes
+                    $className = 'slgb-p-comparison';
+                    if (preg_match('/"className":"([^"]*)"/', $attrString, $classMatch)) {
+                        $className = $classMatch[1];
+                    }
+                    
+                    // Process existing table if it exists in the content
+                    $tableContent = '';
+                    if (preg_match('/<table.*?>(.*?)<\/table>/s', $content, $tableMatch)) {
+                        $tableContent = $tableMatch[1];
+                    } else {
+                        // Build table content from scratch if no table found
+                        $tableContent = '<thead><tr><th></th>';
+                        
+                        if (!empty($leftColumnTitle)) {
+                            $tableContent .= '<th>' . $leftColumnTitle . '</th>';
+                        } else {
+                            $tableContent .= '<th>Column 1</th>';
+                        }
+                        
+                        if (!empty($rightColumnTitle)) {
+                            $tableContent .= '<th>' . $rightColumnTitle . '</th>';
+                        } else {
+                            $tableContent .= '<th>Column 2</th>';
+                        }
+                        
+                        $tableContent .= '</tr></thead><tbody>';
+                        
+                        // Handle nested p-comparison-row blocks 
+                        preg_match_all('/<\!-- wp:slgb\/p-comparison-row (.*?) -->(.*?)<!-- \/wp:slgb\/p-comparison-row -->/s', $content, $rowMatches);
+                        
+                        if (!empty($rowMatches[0])) {
+                            foreach ($rowMatches[1] as $index => $rowAttrString) {
+                                $rowContent = $rowMatches[2][$index];
+                                
+                                // Extract row title, leftColumn, and rightColumn attributes
+                                $rowTitle = '';
+                                $leftColumn = '';
+                                $rightColumn = '';
+                                
+                                if (preg_match('/"title":"(.*?)"/', $rowAttrString, $rowTitleMatch)) {
+                                    $rowTitle = json_decode('"' . $rowTitleMatch[1] . '"');
+                                }
+                                
+                                if (preg_match('/"leftColumn":"(.*?)"/', $rowAttrString, $leftColMatch)) {
+                                    $leftCol = $leftColMatch[1];
+                                    // Handle HTML entity decoding
+                                    $leftColumn = str_replace(['u003c', 'u003e', 'u0026', 'u0022'], ['<', '>', '&', '"'], $leftCol);
+                                    $leftColumn = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $leftColumn) . '"'));
+                                }
+                                
+                                if (preg_match('/"rightColumn":"(.*?)"/', $rowAttrString, $rightColMatch)) {
+                                    $rightCol = $rightColMatch[1];
+                                    // Handle HTML entity decoding
+                                    $rightColumn = str_replace(['u003c', 'u003e', 'u0026', 'u0022'], ['<', '>', '&', '"'], $rightCol);
+                                    $rightColumn = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $rightColumn) . '"'));
+                                }
+                                
+                                // Add row to table
+                                $tableContent .= '<tr>';
+                                $tableContent .= '<td>' . $rowTitle . '</td>';
+                                $tableContent .= '<td>' . $leftColumn . '</td>';
+                                $tableContent .= '<td>' . $rightColumn . '</td>';
+                                $tableContent .= '</tr>';
+                            }
+                        }
+                        
+                        $tableContent .= '</tbody>';
+                    }
+                    
+                    $p_comparison_count++;
+                    
+                    // Create HTML table with appropriate class
+                    $tableHtml = '<table class="' . esc_attr($className) . '">' . $tableContent . '</table>';
+                    
+                    // Return as a core/html block
+                    return sprintf(
+                        '<!-- wp:html -->' . "\n" . 
+                        '%s' . "\n" . 
+                        '<!-- /wp:html -->',
+                        $tableHtml
+                    );
+                },
+                $updated
+            );
+
             if ($original !== $updated) {
                 wp_update_post([
                     'ID' => $post->ID,
@@ -950,11 +1513,17 @@ function oh_convert_slgb_blocks() {
             }
         }
 
+        /**
+         * 1.3. Conversion Results Display
+         */
         add_action('admin_notices', function () use (
             $count, $heading_count, $emph_count, $image_count, 
             $table_count, $subscribe_count, $compare_count, 
             $hints_count, $quote_count, $miniature_count, 
-            $cta_count, $gb_emph_count
+            $cta_count, $gb_emph_count,
+            // New counters 
+            $postimage_count, $dosdont_count, $youtube_count, $pytube_count,
+            $pbtns_count, $post_quote_count, $p_hints_count, $p_comparison_count
         ) {
             echo '<div class="notice notice-success"><p>';
             
@@ -965,6 +1534,7 @@ function oh_convert_slgb_blocks() {
             
             echo '<ul style="list-style-type: disc; margin-left: 20px;">';
             
+            // Original block types
             if ($heading_count > 0) {
                 echo sprintf('<li>%d heading blocks</li>', $heading_count);
             }
@@ -1009,6 +1579,39 @@ function oh_convert_slgb_blocks() {
                 echo sprintf('<li>%d gb-emph blocks</li>', $gb_emph_count);
             }
             
+            // New block types
+            if ($postimage_count > 0) {
+                echo sprintf('<li>%d postimage blocks</li>', $postimage_count);
+            }
+            
+            if ($dosdont_count > 0) {
+                echo sprintf('<li>%d dos-donts blocks</li>', $dosdont_count);
+            }
+            
+            if ($youtube_count > 0) {
+                echo sprintf('<li>%d youtube blocks</li>', $youtube_count);
+            }
+            
+            if ($pytube_count > 0) {
+                echo sprintf('<li>%d p-youtube blocks</li>', $pytube_count);
+            }
+            
+            if ($pbtns_count > 0) {
+                echo sprintf('<li>%d p-btns blocks</li>', $pbtns_count);
+            }
+            
+            if ($post_quote_count > 0) {
+                echo sprintf('<li>%d post-quote blocks</li>', $post_quote_count);
+            }
+            
+            if ($p_hints_count > 0) {
+                echo sprintf('<li>%d p-hints blocks</li>', $p_hints_count);
+            }
+            
+            if ($p_comparison_count > 0) {
+                echo sprintf('<li>%d p-comparison blocks</li>', $p_comparison_count);
+            }
+            
             echo '</ul>';
             echo '</p></div>';
         });
@@ -1017,7 +1620,11 @@ function oh_convert_slgb_blocks() {
 add_action('admin_init', 'oh_convert_slgb_blocks');
 
 /**
- * Add a page in Tools to trigger the conversion.
+ * 2. Admin Interface
+ */
+
+/**
+ * 2.1. Register Admin Page
  */
 function oh_register_slgb_converter_page() {
     add_management_page(
@@ -1031,7 +1638,7 @@ function oh_register_slgb_converter_page() {
 add_action('admin_menu', 'oh_register_slgb_converter_page');
 
 /**
- * Render the admin page UI.
+ * 2.2. Render Admin Page UI
  */
 function oh_render_slgb_converter_page() {
     $url = admin_url('tools.php?page=oh-slgb-converter&oh_convert_blocks=1');
@@ -1054,6 +1661,13 @@ function oh_render_slgb_converter_page() {
                 <li><code>slgb/p-miniature</code> → <code>core/media-text</code> or <code>core/group</code> blocks</li>
                 <li><code>slgb/gb-cta</code> → <code>core/group</code> with heading and buttons</li>
                 <li><code>slgb/gb-emph</code> → <code>core/group</code> with preserved content</li>
+                <li><code>slgb/postimage</code> → <code>core/image</code> blocks</li>
+                <li><code>slgb/dos-donts</code> → <code>core/html</code> blocks (with DOs and DON'Ts tables)</li>
+                <li><code>slgb/youtube</code> and <code>slgb/p-youtube</code> → <code>core/embed</code> blocks</li>
+                <li><code>slgb/p-btns</code> → <code>core/buttons</code> blocks</li>
+                <li><code>slgb/post-quote</code> → <code>core/quote</code> blocks</li>
+                <li><code>slgb/p-hints-row</code> and <code>slgb/p-hints-cell</code> → <code>core/html</code> table rows and cells</li>
+                <li><code>slgb/p-comparison</code> and <code>slgb/p-comparison-row</code> → <code>core/html</code> comparison tables</li>
             </ul>
             <p><strong>CSS Classes Preserved:</strong> The plugin maintains all custom CSS classes from your original blocks to ensure your styling continues to work correctly.</p>
             <p><strong>Important:</strong> Always back up your database before running this conversion.</p>
@@ -1063,6 +1677,7 @@ function oh_render_slgb_converter_page() {
             <h3>CSS Styling Help</h3>
             <p>If you need to add CSS styling, the following classes are commonly used in the converted blocks:</p>
             <ul style="list-style-type: disc; margin-left: 20px;">
+                <!-- Original styles -->
                 <li><code>slgb-table</code> - For converted tables</li>
                 <li><code>slgb-subscribe</code> - For subscribe forms</li>
                 <li><code>slgb-compare</code> - For comparison blocks</li>
@@ -1073,6 +1688,11 @@ function oh_render_slgb_converter_page() {
                 <li><code>slgb-cta</code> - For CTA blocks</li>
                 <li><code>slgb-gb-emph</code> - For emphasis blocks</li>
                 <li><code>slgb-emph</code> - For regular emphasis blocks</li>
+                
+                <!-- New styles -->
+                <li><code>slgb-dosdont</code> - For DOs and DON'Ts tables</li>
+                <li><code>slgb-post-quote</code> - For post quotes</li>
+                <li><code>slgb-p-comparison</code> - For comparison tables</li>
             </ul>
         </div>
         
@@ -1090,7 +1710,11 @@ function oh_render_slgb_converter_page() {
 }
 
 /**
- * Add "Settings" link in Plugins list
+ * 3. Plugin Actions and Styles
+ */
+
+/**
+ * 3.1. Add Plugin Settings Link
  */
 function oh_slgb_plugin_action_links($links) {
     $url = admin_url('tools.php?page=oh-slgb-converter');
@@ -1101,12 +1725,13 @@ function oh_slgb_plugin_action_links($links) {
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');
 
 /**
- * Add custom CSS for converted blocks
+ * 3.2. Add Custom CSS for Converted Blocks
  */
 function oh_add_conversion_css() {
     ?>
     <style>
         /* Basic styling for converted blocks */
+        /* Original styling */
         .slgb-table {
             border-collapse: collapse;
             width: 100%;
@@ -1186,6 +1811,100 @@ function oh_add_conversion_css() {
         
         .slgb-miniature {
             margin: 1.5em 0;
+        }
+        
+        /* New block styles */
+        .slgb-dosdont {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1.5em;
+        }
+        
+        .slgb-dosdont th:first-child {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .slgb-dosdont th:last-child {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        
+        .slgb-dosdont th, 
+        .slgb-dosdont td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        
+        .slgb-dosdont td:first-child {
+            border-left: 3px solid #2e7d32;
+            background-color: #f1f8f1;
+        }
+        
+        .slgb-dosdont td:last-child {
+            border-left: 3px solid #c62828;
+            background-color: #fdf5f5;
+        }
+        
+        .slgb-post-quote {
+            font-style: italic;
+            border-left: 4px solid #888;
+            padding-left: 1em;
+            margin: 1.5em 0;
+        }
+        
+        .slgb-post-quote cite {
+            display: block;
+            font-style: normal;
+            font-weight: bold;
+            margin-top: 0.5em;
+            text-align: right;
+        }
+        
+        .slgb-p-comparison {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1.5em;
+        }
+        
+        .slgb-p-comparison th, 
+        .slgb-p-comparison td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        
+        .slgb-p-comparison th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .slgb-p-comparison tr td:first-child {
+            font-weight: bold;
+            background-color: #f8f9fa;
+        }
+        
+        /* Ensure YouTube embeds are responsive */
+        .wp-block-embed.is-type-video iframe {
+            max-width: 100%;
+            width: 100%;
+        }
+        
+        .wp-embed-aspect-16-9 .wp-block-embed__wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+        }
+        
+        .wp-embed-aspect-16-9 .wp-block-embed__wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
         }
     </style>
     <?php

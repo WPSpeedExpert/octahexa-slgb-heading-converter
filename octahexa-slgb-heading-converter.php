@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.2.16
+ * Version:           2.2.18
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -105,8 +105,24 @@ function oh_convert_slgb_blocks() {
                     $level = $matches[1];
                     $attrs = json_decode('{' . preg_replace('/^\{(.*)\}$/', '$1', $matches[2]) . '}', true);
                     
-                    // Extract text content
-                    $text = isset($attrs['text']) ? json_decode('"' . $attrs['text'] . '"') : '';
+                    // Extract text content and handle URL-encoded entities
+                    $text = '';
+                    if (isset($attrs['text'])) {
+                        // First replace common URL-encoded characters
+                        $decoded_text = str_replace(['u003c', 'u003e', 'u0026', 'u0022', 'u0027', 'u003d'], ['<', '>', '&', '"', "'", '='], $attrs['text']);
+                        
+                        // Handle more complex unicode escape sequences
+                        $decoded_text = preg_replace('/u([0-9a-fA-F]{4})/', '\\u$1', $decoded_text);
+                        
+                        // Try to decode as JSON string with proper handling of escapes
+                        $json_decoded = @json_decode('"' . $decoded_text . '"');
+                        if ($json_decoded !== null) {
+                            $decoded_text = $json_decoded;
+                        }
+                        
+                        // Final HTML entity decode pass
+                        $text = html_entity_decode($decoded_text);
+                    }
                     
                     // Extract any custom classes - preserve exactly as they are
                     $className = isset($attrs['className']) ? $attrs['className'] : '';
@@ -734,7 +750,7 @@ function oh_convert_slgb_blocks() {
             // Extract the text
             $text = '';
             if (preg_match('/"text":"(.*?)"(?:,|})/', $attrString, $textMatch)) {
-                // First replace all possible Unicode escape sequences with proper characters
+                // First replace all possible Unicode escape sequences with proper characters 
                 $escapedText = $textMatch[1];
                 
                 // Handle common HTML entity escapes in Unicode format
@@ -743,6 +759,9 @@ function oh_convert_slgb_blocks() {
                     ['<', '>', '&', '"', "'", '=', ' '],
                     $escapedText
                 );
+                
+                // Additional cleaning for Unicode sequences
+                $escapedText = preg_replace('/u([0-9a-fA-F]{4})/', '\\u$1', $escapedText);
                 
                 // Properly decode all HTML entities
                 $text = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $escapedText) . '"'));
@@ -814,7 +833,7 @@ function oh_convert_slgb_blocks() {
             // Create a core/quote block with the content
             $output = sprintf(
                 '<!-- wp:quote {"className":"wp-block-quote %s"} -->' . "\n" .
-                '<blockquote class="wp-block-quote %s">' . "\n",
+                '<blockquote class="wp-block-quote %s">',
                 htmlspecialchars($className, ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars($className, ENT_QUOTES, 'UTF-8')
             );
@@ -840,10 +859,10 @@ function oh_convert_slgb_blocks() {
             }
             
             // Add content wrapper for text and citation
-            $output .= "<div class=\"gb-quote__content\">\n";
+            $output .= "<div class=\"gb-quote__content\">";
             
             // Add the text content
-            $output .= sprintf('<p>%s</p>' . "\n", $text);
+            $output .= sprintf('<p>%s</p>', $text);
             
             // Add citation if author exists
             if (!empty($author)) {
@@ -853,7 +872,8 @@ function oh_convert_slgb_blocks() {
             // Close content wrapper
             $output .= "</div>\n";
             
-            $output .= '</blockquote>' . "\n" . '<!-- /wp:quote -->';
+            $output .= '</blockquote>
+<!-- /wp:quote -->';
             
             return $output;
         },
@@ -963,7 +983,7 @@ function oh_convert_slgb_blocks() {
                     
                     // Add title with link
                     if (!empty($post_title)) {
-                        $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__title">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . '</a>';
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_self" class="gb-mini__title">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . '</a>';
                     } else {
                         // Use text as title if no post title
                         $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__title">' . htmlspecialchars($text, ENT_QUOTES, 'UTF-8') . '</a>';
@@ -977,10 +997,370 @@ function oh_convert_slgb_blocks() {
                     $miniatureHtml .= '</div></div>';
                     
                     // Return as a core/html block to preserve structure
-                    return sprintf(
-                        '<!-- wp:html -->%s<!-- /wp:html -->',
-                        $miniatureHtml
+                    return '<!-- wp:html -->' . $miniatureHtml . '<!-- /wp:html -->';
+                },
+                $updated
+            );
+
+        /**
+         * 1.1.9.1. Miniature Block Conversion (new format)
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/miniature (.*?) (\/-->|\/>)/',
+                function ($matches) use (&$miniature_count) {
+                    $attrString = $matches[1];
+                    $attrs = json_decode('{' . preg_replace('/^\{(.*)\}$/', '$1', $attrString) . '}', true);
+                    
+                    // Extract the necessary data from attributes
+                    $title = isset($attrs['title']) ? $attrs['title'] : '';
+                    $description = isset($attrs['description']) ? $attrs['description'] : '';
+                    $descr = isset($attrs['descr']) ? $attrs['descr'] : '';
+                    $image = isset($attrs['image']) ? $attrs['image'] : null;
+                    $url = isset($attrs['url']) ? $attrs['url'] : '';
+                    $altText = isset($attrs['altText']) ? $attrs['altText'] : '';
+                    $linkTarget = isset($attrs['linkTarget']) ? $attrs['linkTarget'] : '_self';
+                    $category = isset($attrs['category']) ? $attrs['category'] : '';
+                    $categoryUrl = isset($attrs['categoryUrl']) ? $attrs['categoryUrl'] : '';
+                    $author = isset($attrs['author']) ? $attrs['author'] : '';
+                    $authorUrl = isset($attrs['authorUrl']) ? $attrs['authorUrl'] : '';
+                    
+                    // Handle post_id if it exists
+                    $postId = isset($attrs['post_id']) ? $attrs['post_id'] : '';
+                    
+                    // Handle post_info if it exists - this is a JSON encoded string with post details
+                    if (isset($attrs['post_info']) && !empty($attrs['post_info'])) {
+                        $postInfo = $attrs['post_info'];
+                        // Clean up unicode escape sequences in the JSON string
+                        $postInfo = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $postInfo);
+                        
+                        try {
+                            // Try to decode the JSON - using a more robust technique for the complex structure
+                            $postInfoData = json_decode($postInfo, true);
+                            if (!$postInfoData) {
+                                // Try alternate approach if the first decode fails
+                                $cleanedJson = '{' . preg_replace('/^\{(.*)\}$/', '$1', $postInfo) . '}';
+                                $postInfoData = json_decode($cleanedJson, true);
+                            }
+                            
+                            // Extract relevant information from post_info if decode successful
+                            if ($postInfoData && is_array($postInfoData)) {
+                                // Title
+                                if (empty($title) && isset($postInfoData['title'])) {
+                                    $title = $postInfoData['title'];
+                                }
+                                
+                                // Link/URL
+                                if (empty($url) && isset($postInfoData['link'])) {
+                                    $url = $postInfoData['link'];
+                                }
+                                
+                                // Description
+                                if (empty($description) && empty($descr) && isset($postInfoData['descr'])) {
+                                    $description = $postInfoData['descr'];
+                                } else if (empty($description) && !empty($descr)) {
+                                    $description = $descr;
+                                }
+                                
+                                // Image
+                                if (empty($image) && isset($postInfoData['img'])) {
+                                    $imageData = $postInfoData['img'];
+                                    if (is_array($imageData)) {
+                                        $imageUrl = isset($imageData['src']) ? $imageData['src'] : '';
+                                        $imageWidth = isset($imageData['width']) ? $imageData['width'] : '';
+                                        $imageHeight = isset($imageData['height']) ? $imageData['height'] : '';
+                                        $image = array('url' => $imageUrl, 'width' => $imageWidth, 'height' => $imageHeight);
+                                    }
+                                }
+                                
+                                // Category/Tag
+                                if (empty($category) && isset($postInfoData['tag'])) {
+                                    if (is_array($postInfoData['tag']) && !empty($postInfoData['tag'])) {
+                                        if (isset($postInfoData['tag'][0]) && isset($postInfoData['tag'][0]['title'])) {
+                                            $category = $postInfoData['tag'][0]['title'];
+                                            if (isset($postInfoData['tag'][0]['link'])) {
+                                                $categoryUrl = $postInfoData['tag'][0]['link'];
+                                            }
+                                        }
+                                    } else if (is_array($postInfoData['tag']) && empty($postInfoData['tag'])) {
+                                        // Tag array is empty, do nothing
+                                    } else if (is_object($postInfoData['tag'])) {
+                                        if (isset($postInfoData['tag']->title)) {
+                                            $category = $postInfoData['tag']->title;
+                                            if (isset($postInfoData['tag']->link)) {
+                                                $categoryUrl = $postInfoData['tag']->link;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Author
+                                if (empty($author) && isset($postInfoData['author'])) {
+                                    $authorData = $postInfoData['author'];
+                                    if (is_array($authorData)) {
+                                        $author = isset($authorData['name']) ? $authorData['name'] : '';
+                                        $authorUrl = isset($authorData['link']) ? $authorData['link'] : '';
+                                    }
+                                }
+                            }
+                        } catch (Exception $e) {
+                            // If JSON decode fails, continue with what we have
+                        }
+                    }
+                    
+                    // Special handling for the block format seen in the test file
+                    if (empty($title) && empty($url) && isset($attrs['post_id']) && !empty($attrs['post_id'])) {
+                        $postId = $attrs['post_id'];
+                        
+                        // Try to get post data directly if postId exists and WP functions are available
+                        if (function_exists('get_post')) {
+                            $post = get_post($postId);
+                            if ($post) {
+                                $title = $post->post_title;
+                                if (function_exists('get_permalink')) {
+                                    $url = get_permalink($post);
+                                }
+                                if (function_exists('get_the_post_thumbnail_url')) {
+                                    $imageUrl = get_the_post_thumbnail_url($post, 'full');
+                                }
+                                // Try to get author info
+                                if (function_exists('get_the_author_meta')) {
+                                    $author_id = $post->post_author;
+                                    $author = get_the_author_meta('display_name', $author_id);
+                                    if (function_exists('get_author_posts_url')) {
+                                        $authorUrl = get_author_posts_url($author_id);
+                                    }
+                                }
+                                // Try to get category
+                                if (function_exists('get_the_category')) {
+                                    $categories = get_the_category($postId);
+                                    if (!empty($categories)) {
+                                        $category = $categories[0]->name;
+                                        if (function_exists('get_category_link')) {
+                                            $categoryUrl = get_category_link($categories[0]->term_id);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Process image data if it exists
+                    $imageUrl = '';
+                    $imageWidth = '';
+                    $imageHeight = '';
+                    
+                    if ($image && is_array($image)) {
+                        $imageUrl = isset($image['url']) ? $image['url'] : '';
+                        $imageWidth = isset($image['width']) ? $image['width'] : '';
+                        $imageHeight = isset($image['height']) ? $image['height'] : '';
+                    } elseif (is_string($image)) {
+                        // Sometimes image might be a string URL
+                        $imageUrl = $image;
+                    }
+                    
+                    // If we have post_info in a special format with title/link encoded in JSON
+                    if (isset($attrs['post_info']) && !empty($attrs['post_info'])) {
+                        // This is a special case where post_info contains a JSON string with post metadata
+                        // First clean up the string to make it valid JSON
+                        $post_info = $attrs['post_info'];
+                        
+                        // Replace unicode escapes with actual characters
+                        $post_info = str_replace(
+                            ['u003c', 'u003e', 'u0026', 'u0022', '\\'],
+                            ['<', '>', '&', '"', '\\'],
+                            $post_info
+                        );
+                        
+                        // Clean up start/end braces if they exist
+                        $post_info = preg_replace('/^\{(.*)\}$/', '$1', $post_info);
+                        
+                        // Try with a much simpler approach - extract known fields directly with regex
+                        if (empty($title)) {
+                            if (preg_match('/"title":"([^"]+)"/', $post_info, $matches)) {
+                                $title = $matches[1];
+                            }
+                        }
+                        
+                        if (empty($url)) {
+                            if (preg_match('/"link":"([^"]+)"/', $post_info, $matches)) {
+                                $url = $matches[1];
+                            }
+                        }
+                        
+                        if (empty($description) && preg_match('/"descr":"([^"]+)"/', $post_info, $matches)) {
+                            $description = $matches[1];
+                        }
+                        
+                        // Check if there's author information
+                        if (empty($author) && preg_match('/"author":\{([^\}]+)\}/', $post_info, $matches)) {
+                            $author_info = $matches[1];
+                            if (preg_match('/"name":"([^"]+)"/', $author_info, $name_matches)) {
+                                $author = $name_matches[1];
+                            }
+                            if (preg_match('/"link":"([^"]+)"/', $author_info, $link_matches)) {
+                                $authorUrl = $link_matches[1];
+                            }
+                        }
+                        
+                        // Check for image information
+                        if (empty($imageUrl) && preg_match('/"img":\{([^\}]+)\}/', $post_info, $matches)) {
+                            $img_info = $matches[1];
+                            if (preg_match('/"src":"([^"]+)"/', $img_info, $src_matches)) {
+                                $imageUrl = $src_matches[1];
+                            }
+                            if (preg_match('/"width":"?([0-9]+)"?/', $img_info, $width_matches)) {
+                                $imageWidth = $width_matches[1];
+                            }
+                            if (preg_match('/"height":"?([0-9]+)"?/', $img_info, $height_matches)) {
+                                $imageHeight = $height_matches[1];
+                            }
+                        }
+                    }
+                    
+                    // Decode HTML entities in text fields
+                    $title = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $title);
+                    $title = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $title) . '"'));
+                    
+                    $description = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $description);
+                    $description = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $description) . '"'));
+                    
+                    $category = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $category);
+                    $category = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $category) . '"'));
+                    
+                    $author = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $author);
+                    $author = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $author) . '"'));
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (isset($attrs['className'])) {
+                        $existingClasses = $attrs['className'];
+                    }
+                    
+                    // If no class exists, use gb-mini for backward compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'gb-mini';
+                    
+                    $miniature_count++;
+                    
+                    // Create enhanced HTML structure based on the provided template
+                    $miniatureHtml = '<div class="' . htmlspecialchars($className, ENT_QUOTES, 'UTF-8') . '">';
+                    
+                    // Add image section if available
+                    if (!empty($imageUrl)) {
+                        $miniatureHtml .= '<div class="gb-mini__image p-blog__image-shadow" aria-hidden="true">';
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" tabindex="-1" class="gb-mini__image-link p-blog__image-link">';
+                        $miniatureHtml .= '<span class="visually-hidden">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . ($linkTarget === '_blank' ? ' (opens in new tab)' : '') . '</span>';
+                        $miniatureHtml .= '<picture>';
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(max-width: 499px)">';
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(min-width: 500px)">';
+                        $miniatureHtml .= '<img loading="lazy" decoding="async" src="' . htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8') . '" alt="' . htmlspecialchars($altText, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__img"';
+                        if (!empty($imageWidth) && !empty($imageHeight)) {
+                            $miniatureHtml .= ' width="' . intval($imageWidth) . '" height="' . intval($imageHeight) . '"';
+                        }
+                        $miniatureHtml .= '>';
+                        $miniatureHtml .= '</picture>';
+                        $miniatureHtml .= '</a></div>';
+                    }
+                    
+                    // Add content section
+                    $miniatureHtml .= '<div class="gb-mini__content">';
+                    
+                    // Add category if available
+                    if (!empty($category)) {
+                        $categoryLinkHtml = '<span class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</span>';
+                        if (!empty($categoryUrl)) {
+                            $categoryLinkHtml = '<a href="' . htmlspecialchars($categoryUrl, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</a>';
+                        }
+                        $miniatureHtml .= $categoryLinkHtml;
+                    }
+                    
+                    // Add title with link
+                    if (!empty($title)) {
+                        if (!empty($url)) {
+                            $miniatureHtml .= '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</a>';
+                        } else {
+                            $miniatureHtml .= '<div class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</div>';
+                        }
+                    }
+                    
+                    // Add description if available
+                    if (!empty($description)) {
+                        $miniatureHtml .= '<div class="gb-mini__description">' . $description . '</div>';
+                    }
+                    
+                    // Add author if available
+                    if (!empty($author)) {
+                        $authorLinkHtml = '<span class="gb-mini__author">' . htmlspecialchars($author, ENT_QUOTES, 'UTF-8') . '</span>';
+                        if (!empty($authorUrl)) {
+                            $authorLinkHtml = '<a href="' . htmlspecialchars($authorUrl, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__author">' . htmlspecialchars($author, ENT_QUOTES, 'UTF-8') . '</a>';
+                        }
+                        $miniatureHtml .= $authorLinkHtml;
+                    }
+                    
+                    $miniatureHtml .= '</div></div>';
+                    
+                    // Return as a core/html block to preserve structure
+                    return '<!-- wp:html -->' . $miniatureHtml . '<!-- /wp:html -->';
+                },
+                $updated
+            );
+
+        /**
+         * 1.1.9.2. Post-Quote Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/post-quote (.*?) \/-->/',
+                function ($matches) use (&$quote_count) {
+                    $attrString = $matches[1];
+                    $attrs = json_decode('{' . preg_replace('/^\{(.*)\}$/', '$1', $attrString) . '}', true);
+                    
+                    // Extract content from the attributes
+                    $content = isset($attrs['content']) ? $attrs['content'] : '';
+                    $author = isset($attrs['author']) ? $attrs['author'] : '';
+                    $featured = isset($attrs['featured']) && $attrs['featured'] === true ? true : false;
+                    $hasPhoto = isset($attrs['photo']) && $attrs['photo'] === true ? true : false;
+                    
+                    // Decode HTML entities in content
+                    $content = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $content);
+                    $content = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $content) . '"'));
+                    
+                    // Decode HTML entities in author
+                    $author = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $author);
+                    $author = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $author) . '"'));
+                    
+                    // Determine className
+                    $className = 'slgb-quote';
+                    if (isset($attrs['className'])) {
+                        $className .= ' ' . $attrs['className'];
+                    }
+                    
+                    // Add style class based on featured status
+                    $styleClass = $featured ? 'is-style-large' : 'is-style-normal';
+                    
+                    // Create quote block HTML with the proper structure
+                    $quoteHtml = sprintf(
+                        '<!-- wp:quote {"className":"wp-block-quote %s %s"} -->' .
+                        '<blockquote class="wp-block-quote %s %s">' .
+                        '<div class="gb-quote__content">' .
+                        '<p>%s</p>' .
+                        '</div>',
+                        htmlspecialchars($className, ENT_QUOTES, 'UTF-8'),
+                        htmlspecialchars($styleClass, ENT_QUOTES, 'UTF-8'),
+                        htmlspecialchars($className, ENT_QUOTES, 'UTF-8'),
+                        htmlspecialchars($styleClass, ENT_QUOTES, 'UTF-8'),
+                        $content
                     );
+                    
+                    // Add citation if author exists
+                    if (!empty($author)) {
+                        $quoteHtml .= sprintf('<cite>%s</cite>', $author);
+                    }
+                    
+                    // Close the quote block
+                    $quoteHtml .= '</blockquote><!-- /wp:quote -->';
+                    
+                    $quote_count++;
+                    
+                    return $quoteHtml;
                 },
                 $updated
             );
@@ -1004,7 +1384,7 @@ function oh_convert_slgb_blocks() {
                     
                     // Extract the title
                     $title = '';
-                    if (preg_match('/"title":"(.*?)"/', $attrString, $titleMatch)) {
+                    if (preg_match('/"id="h-%s" tabindex="-1"(.*?)"/', $attrString, $titleMatch)) {
                         $title = json_decode('"' . $titleMatch[1] . '"');
                         // Convert escaped HTML entities back to HTML tags
                         $title = str_replace(['\\u003c', '\\u003e'], ['<', '>'], $title);
@@ -1340,18 +1720,6 @@ function oh_convert_slgb_blocks() {
                             
                             // Different approach for decoding
                             $cells = json_decode($processedJson, true);
-                            
-                            // If still null, try another approach
-                            if (is_null($cells)) {
-                                // Try direct replacement approach
-                                $directReplaced = str_replace(
-                                    ['u0022do', 'dontu0022', 'u003cp', 'pu003e'],
-                                    ['"do', 'dont"', '<p', 'p>'],
-                                    $cellsMatch[1]
-                                );
-                                $cells = json_decode($directReplaced, true);
-                                error_log('Second attempt JSON: ' . $directReplaced);
-                            }
                             
                             if (is_array($cells)) {
                                 // Get the header values from the attributes if available
@@ -1738,7 +2106,7 @@ function oh_convert_slgb_blocks() {
                     $output = sprintf(
                         '<!-- wp:quote {"className":"%s"} -->' . "\n" .
                         '<blockquote class="wp-block-quote %s">' . "\n" .
-                        '<p>%s</p>' . "\n",
+                        '<p>%s</p>',
                         esc_attr($classAttr),
                         esc_attr($classAttr),
                         $quote_text
@@ -1749,7 +2117,8 @@ function oh_convert_slgb_blocks() {
                         $output .= sprintf('<cite>%s</cite>' . "\n", esc_html($author));
                     }
                     
-                    $output .= '</blockquote>' . "\n" . '<!-- /wp:quote -->';
+                    $output .= '</blockquote>
+<!-- /wp:quote -->';
                     
                     return $output;
                 },

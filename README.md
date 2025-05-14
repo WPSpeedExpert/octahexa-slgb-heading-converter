@@ -11,8 +11,10 @@ Converts all custom SLGB blocks to native WordPress core blocks with proper HTML
 - `slgb/p-hints` → `core/html` blocks with tables
 - `slgb/p-quote` → `core/quote` blocks
 - `slgb/p-miniature` → `core/media-text` or `core/group` blocks
+- `slgb/miniature` → `core/media-text` or `core/group` blocks
 - `slgb/gb-cta` → `core/group` with heading and buttons
 - `slgb/gb-emph` → `core/group` with preserved content
+  
 
 **Preserves CSS classes and styling attributes** to maintain your design while making content compatible with any WordPress theme.
 
@@ -22,7 +24,7 @@ Converts all custom SLGB blocks to native WordPress core blocks with proper HTML
 
 - **Plugin Name:** OctaHexa SLGB Block Converter  
 - **Author:** OctaHexa  
-- **Version:** 2.0.0
+- **Version:** 2.2.18
 - **GitHub URI:** https://github.com/WPSpeedExpert/octahexa-slgb-block-converter
 
 ---

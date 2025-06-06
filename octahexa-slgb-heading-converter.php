@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.2.18
+ * Version:           2.2.20
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -883,15 +883,17 @@ function oh_convert_slgb_blocks() {
         /**
          * 1.1.9. Miniature Block Conversion
          */
+            // First pattern with self-closing tag
             $updated = preg_replace_callback(
                 '/<\!-- wp:slgb\/p-miniature (.*?) \/-->/',
                 function ($matches) use (&$miniature_count) {
                     $attrString = $matches[1];
                     $attrs = json_decode('{' . preg_replace('/^\{(.*)\}$/', '$1', $attrString) . '}', true);
                     
-                    // Extract text content and postId
+                    // Extract text content, postId and postInfo
                     $text = isset($attrs['text']) ? $attrs['text'] : '';
                     $postId = isset($attrs['postId']) ? $attrs['postId'] : '';
+                    $postInfo = isset($attrs['postInfo']) ? $attrs['postInfo'] : null;
                     
                     // Decode HTML entities in text
                     $text = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', ''], $text);
@@ -912,10 +914,126 @@ function oh_convert_slgb_blocks() {
                     $post_title = '';
                     $post_url = '';
                     $post_image_url = '';
+                    $post_image_width = '';
+                    $post_image_height = '';
                     $author_name = '';
                     $author_url = '';
                     $category_name = '';
                     $category_url = '';
+                    
+                    // First try to extract data from postInfo if available
+                    if (!empty($postInfo) && is_array($postInfo)) {
+                        // Direct array access for postInfo
+                        if (isset($postInfo['title'])) {
+                            $post_title = $postInfo['title'];
+                        }
+                        if (isset($postInfo['link'])) {
+                            $post_url = $postInfo['link'];
+                        }
+                        
+                        // Handle category
+                        if (isset($postInfo['category']) && is_array($postInfo['category'])) {
+                            if (isset($postInfo['category']['title'])) {
+                                $category_name = $postInfo['category']['title'];
+                            }
+                            if (isset($postInfo['category']['link'])) {
+                                $category_url = $postInfo['category']['link'];
+                            }
+                        }
+                        
+                        // Handle author
+                        if (isset($postInfo['author']) && is_array($postInfo['author'])) {
+                            if (isset($postInfo['author']['name'])) {
+                                $author_name = $postInfo['author']['name'];
+                            }
+                            if (isset($postInfo['author']['link'])) {
+                                $author_url = $postInfo['author']['link'];
+                            }
+                        }
+                        
+                        // Handle image
+                        if (isset($postInfo['img']) && is_array($postInfo['img'])) {
+                            if (isset($postInfo['img']['src'])) {
+                                $post_image_url = $postInfo['img']['src'];
+                            }
+                            if (isset($postInfo['img']['width'])) {
+                                $post_image_width = $postInfo['img']['width'];
+                            }
+                            if (isset($postInfo['img']['height'])) {
+                                $post_image_height = $postInfo['img']['height'];
+                            }
+                        }
+                    }
+                    // If postInfo is a string (JSON), try to decode it
+                    else if (!empty($postInfo) && is_string($postInfo)) {
+                        // Attempt to fix common JSON escaping issues
+                        $postInfo = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', '\\'], $postInfo);
+                        
+                        try {
+                            $postInfoData = json_decode($postInfo, true);
+                            
+                            if ($postInfoData && is_array($postInfoData)) {
+                                // Extract title and link
+                                if (isset($postInfoData['title'])) {
+                                    $post_title = $postInfoData['title'];
+                                }
+                                if (isset($postInfoData['link'])) {
+                                    $post_url = $postInfoData['link'];
+                                }
+                                
+                                // Handle category/tag
+                                if (isset($postInfoData['tag'])) {
+                                    if (is_array($postInfoData['tag'])) {
+                                        if (!empty($postInfoData['tag']) && isset($postInfoData['tag'][0])) {
+                                            if (isset($postInfoData['tag'][0]['title'])) {
+                                                $category_name = $postInfoData['tag'][0]['title'];
+                                            }
+                                            if (isset($postInfoData['tag'][0]['link'])) {
+                                                $category_url = $postInfoData['tag'][0]['link'];
+                                            }
+                                        }
+                                    } else if (isset($postInfoData['tag']['title'])) {
+                                        $category_name = $postInfoData['tag']['title'];
+                                        if (isset($postInfoData['tag']['link'])) {
+                                            $category_url = $postInfoData['tag']['link'];
+                                        }
+                                    }
+                                } else if (isset($postInfoData['category']) && is_array($postInfoData['category'])) {
+                                    if (isset($postInfoData['category']['title'])) {
+                                        $category_name = $postInfoData['category']['title'];
+                                    }
+                                    if (isset($postInfoData['category']['link'])) {
+                                        $category_url = $postInfoData['category']['link'];
+                                    }
+                                }
+                                
+                                // Handle author
+                                if (isset($postInfoData['author']) && is_array($postInfoData['author'])) {
+                                    if (isset($postInfoData['author']['name'])) {
+                                        $author_name = $postInfoData['author']['name'];
+                                    }
+                                    if (isset($postInfoData['author']['link'])) {
+                                        $author_url = $postInfoData['author']['link'];
+                                    }
+                                }
+                                
+                                // Handle image
+                                if (isset($postInfoData['img']) && is_array($postInfoData['img'])) {
+                                    if (isset($postInfoData['img']['src'])) {
+                                        $post_image_url = $postInfoData['img']['src'];
+                                    }
+                                    if (isset($postInfoData['img']['width'])) {
+                                        $post_image_width = $postInfoData['img']['width'];
+                                    }
+                                    if (isset($postInfoData['img']['height'])) {
+                                        $post_image_height = $postInfoData['img']['height'];
+                                    }
+                                }
+                            }
+                        } catch (Exception $e) {
+                            // Failed to decode JSON, continue with what we have
+                        }
+                    }
                     
                     // If postId exists, try to get post data
                     if (!empty($postId) && function_exists('get_post')) {
@@ -958,7 +1076,7 @@ function oh_convert_slgb_blocks() {
                     }
                     
                     // Create enhanced HTML structure based on the provided template
-                    $miniatureHtml = '<div class="' . htmlspecialchars($className, ENT_QUOTES, 'UTF-8') . '">';
+                    $miniatureHtml = '<div class="gb-mini">';
                     
                     // Add image section if available
                     if (!empty($post_image_url)) {
@@ -966,9 +1084,35 @@ function oh_convert_slgb_blocks() {
                         $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" tabindex="-1" class="gb-mini__image-link p-blog__image-link">';
                         $miniatureHtml .= '<span class="visually-hidden">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . ' (opens in new tab)</span>';
                         $miniatureHtml .= '<picture>';
-                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($post_image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(max-width: 499px)">';
-                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($post_image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(min-width: 500px)">';
-                        $miniatureHtml .= '<img loading="lazy" decoding="async" src="' . htmlspecialchars($post_image_url, ENT_QUOTES, 'UTF-8') . '" alt="Post thumbnail" class="gb-mini__img">';
+                        
+                        // Get domain and path from URL for proper image path
+                        $image_path_parts = parse_url($post_image_url);
+                        $image_domain = '';
+                        if (isset($image_path_parts['host'])) {
+                            $image_domain = $image_path_parts['scheme'] . '://' . $image_path_parts['host'];
+                        }
+                        
+                        // If image is from direct URL, use it as is, otherwise try to build WordPress media URL
+                        $image_url = $post_image_url;
+                        if (strpos($post_image_url, 'wp-content/uploads') === false && strpos($post_image_url, '/img/') !== false) {
+                            // If it's an 'img' path, use it as is
+                            $image_url = $post_image_url;
+                        } else if (strpos($post_image_url, 'wp-content/uploads') === false) {
+                            // Try to build WordPress media path
+                            $image_filename = basename($post_image_url);
+                            $image_url = $image_domain . '/wp-content/uploads/' . date('Y/m') . '/' . $image_filename;
+                        }
+                        
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(max-width: 499px)">';
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(min-width: 500px)">';
+                        
+                        // Add width and height if available, include srcset attribute
+                        if (!empty($post_image_width) && !empty($post_image_height)) {
+                            $miniatureHtml .= '<img loading="lazy" decoding="async" width="' . htmlspecialchars($post_image_width, ENT_QUOTES, 'UTF-8') . '" height="' . htmlspecialchars($post_image_height, ENT_QUOTES, 'UTF-8') . '" src="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" alt="Post thumbnail" class="gb-mini__img">';
+                        } else {
+                            $miniatureHtml .= '<img loading="lazy" decoding="async" src="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" alt="Post thumbnail" class="gb-mini__img">';
+                        }
+                        
                         $miniatureHtml .= '</picture>';
                         $miniatureHtml .= '</a></div>';
                     }
@@ -984,6 +1128,11 @@ function oh_convert_slgb_blocks() {
                     // Add title with link
                     if (!empty($post_title)) {
                         $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_self" class="gb-mini__title">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . '</a>';
+                        
+                        // Add text as description
+                        if (!empty($text)) {
+                            $miniatureHtml .= '<p class="gb-mini__text">' . $text . '</p>';
+                        }
                     } else {
                         // Use text as title if no post title
                         $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__title">' . htmlspecialchars($text, ENT_QUOTES, 'UTF-8') . '</a>';
@@ -995,6 +1144,255 @@ function oh_convert_slgb_blocks() {
                     }
                     
                     $miniatureHtml .= '</div></div>';
+                    
+                    // Return as a core/html block to preserve structure
+                    return '<!-- wp:html -->' . $miniatureHtml . '<!-- /wp:html -->';
+                },
+                $updated
+            );
+
+        /**
+         * 1.1.9.0. Non-self-closing p-miniature Block Conversion
+         */
+            $updated = preg_replace_callback(
+                '/<\!-- wp:slgb\/p-miniature (.*?) -->(.*?)<\!-- \/wp:slgb\/p-miniature -->/s',
+                function ($matches) use (&$miniature_count) {
+                    $attrString = $matches[1];
+                    $blockContent = $matches[2];
+                    $attrs = json_decode('{' . preg_replace('/^\{(.*)\}$/', '$1', $attrString) . '}', true);
+                    
+                    // Extract text content, postId and postInfo
+                    $text = isset($attrs['text']) ? $attrs['text'] : '';
+                    $postId = isset($attrs['postId']) ? $attrs['postId'] : '';
+                    $postInfo = isset($attrs['postInfo']) ? $attrs['postInfo'] : null;
+                    
+                    // Decode HTML entities in text
+                    $text = str_replace(['u003c', 'u003e', 'u0026', 'u0022', '\\'], ['<', '>', '&', '"', '\\'], $text);
+                    if (!empty($text)) {
+                        try {
+                            $text = html_entity_decode(json_decode('"' . str_replace('"', '\\"', $text) . '"'));
+                        } catch (Exception $e) {
+                            // If JSON decoding fails, continue with text as is
+                        }
+                    }
+                    
+                    // Default values
+                    $post_title = '';
+                    $post_url = '';
+                    $post_image_url = '';
+                    $post_image_width = '';
+                    $post_image_height = '';
+                    $author_name = '';
+                    $author_url = '';
+                    $category_name = '';
+                    $category_url = '';
+                    
+                    // Extract image from blockContent if available
+                    if (preg_match('/<img[^>]*src=["\']([^"\']*)["\']/i', $blockContent, $img_matches)) {
+                        $post_image_url = $img_matches[1];
+                        
+                        // Try to get width and height
+                        if (preg_match('/width=["\']([^"\']*)["\']/i', $blockContent, $width_matches)) {
+                            $post_image_width = $width_matches[1];
+                        }
+                        if (preg_match('/height=["\']([^"\']*)["\']/i', $blockContent, $height_matches)) {
+                            $post_image_height = $height_matches[1];
+                        }
+                    }
+                    
+                    // Extract category link
+                    if (preg_match('/<a[^>]*href=["\']([^"\']*)["\'][^>]*>([^<]*)<\/a>/i', $blockContent, $cat_matches)) {
+                        $category_url = $cat_matches[1];
+                        $category_name = strip_tags($cat_matches[2]);
+                    }
+                    
+                    // Extract title with link
+                    if (preg_match('/<a[^>]*href=["\']([^"\']*)["\'][^>]*><strong>([^<]*)<\/strong><\/a>/i', $blockContent, $title_matches)) {
+                        $post_url = $title_matches[1];
+                        $post_title = strip_tags($title_matches[2]);
+                    }
+                    
+                    // Extract author
+                    if (preg_match('/<a[^>]*href=["\']([^"\']*author\/[^"\']*)["\'][^>]*>([^<]*)<\/a>/i', $blockContent, $author_matches)) {
+                        $author_url = $author_matches[1];
+                        $author_name = strip_tags($author_matches[2]);
+                    }
+                    
+                    // Extract paragraph content
+                    if (preg_match('/<p>([^<]*)<\/p>/i', $blockContent, $para_matches)) {
+                        $text = $para_matches[1];
+                    }
+                    
+                    // Try to process postInfo if it's available
+                    if (!empty($postInfo)) {
+                        if (is_string($postInfo)) {
+                            try {
+                                $postInfoData = json_decode($postInfo, true);
+                                if (is_array($postInfoData)) {
+                                    // Fill in from postInfo data
+                                    if (empty($post_title) && isset($postInfoData['title'])) {
+                                        $post_title = $postInfoData['title'];
+                                    }
+                                    if (empty($post_url) && isset($postInfoData['link'])) {
+                                        $post_url = $postInfoData['link'];
+                                    }
+                                    
+                                    // Handle category
+                                    if (empty($category_name) && isset($postInfoData['category'])) {
+                                        if (isset($postInfoData['category']['title'])) {
+                                            $category_name = $postInfoData['category']['title'];
+                                        }
+                                        if (isset($postInfoData['category']['link'])) {
+                                            $category_url = $postInfoData['category']['link'];
+                                        }
+                                    }
+                                    
+                                    // Handle image
+                                    if (empty($post_image_url) && isset($postInfoData['img'])) {
+                                        if (isset($postInfoData['img']['src'])) {
+                                            $post_image_url = $postInfoData['img']['src'];
+                                        }
+                                        if (isset($postInfoData['img']['width'])) {
+                                            $post_image_width = $postInfoData['img']['width'];
+                                        }
+                                        if (isset($postInfoData['img']['height'])) {
+                                            $post_image_height = $postInfoData['img']['height'];
+                                        }
+                                    }
+                                    
+                                    // Handle author
+                                    if (empty($author_name) && isset($postInfoData['author'])) {
+                                        if (isset($postInfoData['author']['name'])) {
+                                            $author_name = $postInfoData['author']['name'];
+                                        }
+                                        if (isset($postInfoData['author']['link'])) {
+                                            $author_url = $postInfoData['author']['link'];
+                                        }
+                                    }
+                                }
+                            } catch (Exception $e) {
+                                // Failed to parse JSON, continue with what we have
+                            }
+                        } else if (is_array($postInfo)) {
+                            // Direct array access
+                            if (empty($post_title) && isset($postInfo['title'])) {
+                                $post_title = $postInfo['title'];
+                            }
+                            if (empty($post_url) && isset($postInfo['link'])) {
+                                $post_url = $postInfo['link'];
+                            }
+                            
+                            // Handle category
+                            if (empty($category_name) && isset($postInfo['category'])) {
+                                if (isset($postInfo['category']['title'])) {
+                                    $category_name = $postInfo['category']['title'];
+                                }
+                                if (isset($postInfo['category']['link'])) {
+                                    $category_url = $postInfo['category']['link'];
+                                }
+                            }
+                            
+                            // Handle image
+                            if (empty($post_image_url) && isset($postInfo['img'])) {
+                                if (isset($postInfo['img']['src'])) {
+                                    $post_image_url = $postInfo['img']['src'];
+                                }
+                                if (isset($postInfo['img']['width'])) {
+                                    $post_image_width = $postInfo['img']['width'];
+                                }
+                                if (isset($postInfo['img']['height'])) {
+                                    $post_image_height = $postInfo['img']['height'];
+                                }
+                            }
+                            
+                            // Handle author
+                            if (empty($author_name) && isset($postInfo['author'])) {
+                                if (isset($postInfo['author']['name'])) {
+                                    $author_name = $postInfo['author']['name'];
+                                }
+                                if (isset($postInfo['author']['link'])) {
+                                    $author_url = $postInfo['author']['link'];
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Extract existing classes - preserve exactly as they are
+                    $existingClasses = '';
+                    if (isset($attrs['className'])) {
+                        $existingClasses = $attrs['className'];
+                    }
+                    
+                    // If no class exists, use gb-mini for backward compatibility
+                    $className = !empty($existingClasses) ? $existingClasses : 'gb-mini';
+                    
+                    // Create the HTML output with the proper gb-mini structure
+                    $miniatureHtml = '<div class="' . $className . '">';
+                    
+                    // Add image section if available
+                    if (!empty($post_image_url)) {
+                        $miniatureHtml .= '<div class="gb-mini__image p-blog__image-shadow" aria-hidden="true">';
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" tabindex="-1" class="gb-mini__image-link p-blog__image-link">';
+                        $miniatureHtml .= '<span class="visually-hidden">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . ' (opens in new tab)</span>';
+                        $miniatureHtml .= '<picture>';
+                        
+                        // Generate appropriate image URLs
+                        $image_url = $post_image_url;
+                        if (strpos($post_image_url, '/img/') !== false) {
+                            // For images in /img/ directory, keep as is
+                            $domain = parse_url($post_image_url, PHP_URL_SCHEME) . '://' . parse_url($post_image_url, PHP_URL_HOST);
+                            $pathInfo = pathinfo($post_image_url);
+                            $filename = $pathInfo['basename'];
+                            $wp_path = '/wp-content/uploads/' . date('Y/m') . '/';
+                            
+                            // Try to see if we should map to WP uploads path
+                            if (strpos($image_url, $wp_path) === false) {
+                                $image_url = $domain . $wp_path . $filename;
+                            }
+                        }
+                        
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(max-width: 499px)">';
+                        $miniatureHtml .= '<source srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" type="image/png" media="(min-width: 500px)">';
+                        
+                        if (!empty($post_image_width) && !empty($post_image_height)) {
+                            $miniatureHtml .= '<img loading="lazy" decoding="async" width="' . htmlspecialchars($post_image_width, ENT_QUOTES, 'UTF-8') . '" height="' . htmlspecialchars($post_image_height, ENT_QUOTES, 'UTF-8') . '" src="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" alt="Post thumbnail" class="gb-mini__img">';
+                        } else {
+                            $miniatureHtml .= '<img loading="lazy" decoding="async" src="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . '" srcset="' . htmlspecialchars($image_url, ENT_QUOTES, 'UTF-8') . ' 1x" alt="Post thumbnail" class="gb-mini__img">';
+                        }
+                        
+                        $miniatureHtml .= '</picture>';
+                        $miniatureHtml .= '</a></div>';
+                    }
+                    
+                    // Add content section
+                    $miniatureHtml .= '<div class="gb-mini__content">';
+                    
+                    // Add category if available
+                    if (!empty($category_name)) {
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($category_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__tag">' . htmlspecialchars($category_name, ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
+                    
+                    // Add title with link
+                    if (!empty($post_title)) {
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($post_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__title">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . '</a>';
+                        
+                        // Add text as description
+                        if (!empty($text)) {
+                            $miniatureHtml .= '<p class="gb-mini__text">' . $text . '</p>';
+                        }
+                    } else if (!empty($text)) {
+                        // Use text as standalone paragraph if no title
+                        $miniatureHtml .= '<p class="gb-mini__text">' . $text . '</p>';
+                    }
+                    
+                    // Add author if available
+                    if (!empty($author_name)) {
+                        $miniatureHtml .= '<a href="' . htmlspecialchars($author_url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__author">' . htmlspecialchars($author_name, ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
+                    
+                    $miniatureHtml .= '</div></div>';
+                    
+                    $miniature_count++;
                     
                     // Return as a core/html block to preserve structure
                     return '<!-- wp:html -->' . $miniatureHtml . '<!-- /wp:html -->';
@@ -1242,7 +1640,7 @@ function oh_convert_slgb_blocks() {
                     $miniature_count++;
                     
                     // Create enhanced HTML structure based on the provided template
-                    $miniatureHtml = '<div class="' . htmlspecialchars($className, ENT_QUOTES, 'UTF-8') . '">';
+                    $miniatureHtml = '<div class="gb-mini">';
                     
                     // Add image section if available
                     if (!empty($imageUrl)) {
@@ -1268,23 +1666,24 @@ function oh_convert_slgb_blocks() {
                     if (!empty($category)) {
                         $categoryLinkHtml = '<span class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</span>';
                         if (!empty($categoryUrl)) {
-                            $categoryLinkHtml = '<a href="' . htmlspecialchars($categoryUrl, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</a>';
+                            $miniatureHtml .= '<a href="' . htmlspecialchars($categoryUrl, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</a>';
+                        } else {
+                            $miniatureHtml .= '<span class="gb-mini__tag">' . htmlspecialchars($category, ENT_QUOTES, 'UTF-8') . '</span>';
                         }
-                        $miniatureHtml .= $categoryLinkHtml;
                     }
                     
                     // Add title with link
                     if (!empty($title)) {
                         if (!empty($url)) {
-                            $miniatureHtml .= '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="' . htmlspecialchars($linkTarget, ENT_QUOTES, 'UTF-8') . '" class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</a>';
+                            $miniatureHtml .= '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="_blank" class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</a>';
                         } else {
-                            $miniatureHtml .= '<div class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</div>';
+                            $miniatureHtml .= '<span class="gb-mini__title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</span>';
                         }
                     }
                     
                     // Add description if available
                     if (!empty($description)) {
-                        $miniatureHtml .= '<div class="gb-mini__description">' . $description . '</div>';
+                        $miniatureHtml .= '<p class="gb-mini__text">' . $description . '</p>';
                     }
                     
                     // Add author if available
@@ -1338,14 +1737,12 @@ function oh_convert_slgb_blocks() {
                     
                     // Create quote block HTML with the proper structure
                     $quoteHtml = sprintf(
-                        '<!-- wp:quote {"className":"wp-block-quote %s %s"} -->' .
-                        '<blockquote class="wp-block-quote %s %s">' .
+                        '<!-- wp:quote {"className":"wp-block-quote slgb-quote %s"} -->' .
+                        '<blockquote class="wp-block-quote slgb-quote %s">' .
                         '<div class="gb-quote__content">' .
                         '<p>%s</p>' .
                         '</div>',
-                        htmlspecialchars($className, ENT_QUOTES, 'UTF-8'),
                         htmlspecialchars($styleClass, ENT_QUOTES, 'UTF-8'),
-                        htmlspecialchars($className, ENT_QUOTES, 'UTF-8'),
                         htmlspecialchars($styleClass, ENT_QUOTES, 'UTF-8'),
                         $content
                     );
@@ -2104,9 +2501,9 @@ function oh_convert_slgb_blocks() {
                     
                     // Create a core/quote block
                     $output = sprintf(
-                        '<!-- wp:quote {"className":"%s"} -->' . "\n" .
-                        '<blockquote class="wp-block-quote %s">' . "\n" .
-                        '<p>%s</p>',
+                        '<!-- wp:quote {"className":"wp-block-quote slgb-quote %s"} -->' . "\n" .
+                        '<blockquote class="wp-block-quote slgb-quote %s">' . "\n" .
+                        '<div class="gb-quote__content"><p>%s</p></div>',
                         esc_attr($classAttr),
                         esc_attr($classAttr),
                         $quote_text
@@ -2484,5 +2881,3 @@ function oh_slgb_plugin_action_links($links) {
     return $links;
 }
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');
-
-

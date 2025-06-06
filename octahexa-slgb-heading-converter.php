@@ -3,7 +3,7 @@
  * Plugin Name:       OctaHexa SLGB Block Converter
  * Plugin URI:        https://octahexa.com/plugins/octahexa-slgb-block-converter
  * Description:       Converts SLGB custom blocks to core blocks with proper HTML formatting while preserving classes and styling.
- * Version:           2.2.20
+ * Version:           2.2.21
  * Author:            OctaHexa
  * Author URI:        https://octahexa.com
  * Text Domain:       octahexa-slgb-converter
@@ -1336,18 +1336,48 @@ function oh_convert_slgb_blocks() {
                         $miniatureHtml .= '<span class="visually-hidden">' . htmlspecialchars($post_title, ENT_QUOTES, 'UTF-8') . ' (opens in new tab)</span>';
                         $miniatureHtml .= '<picture>';
                         
-                        // Generate appropriate image URLs
+                        // Initialize with existing image URL
                         $image_url = $post_image_url;
-                        if (strpos($post_image_url, '/img/') !== false) {
-                            // For images in /img/ directory, keep as is
-                            $domain = parse_url($post_image_url, PHP_URL_SCHEME) . '://' . parse_url($post_image_url, PHP_URL_HOST);
-                            $pathInfo = pathinfo($post_image_url);
-                            $filename = $pathInfo['basename'];
-                            $wp_path = '/wp-content/uploads/' . date('Y/m') . '/';
+                        
+                        // Try to use the image from postInfo data if available (from the block attributes JSON)
+                        if (isset($postInfo['img']) && isset($postInfo['img']['src'])) {
+                            $image_url = $postInfo['img']['src'];  // This is the most reliable source
                             
-                            // Try to see if we should map to WP uploads path
-                            if (strpos($image_url, $wp_path) === false) {
-                                $image_url = $domain . $wp_path . $filename;
+                            // Also get dimensions if available
+                            if (isset($postInfo['img']['width'])) {
+                                $post_image_width = $postInfo['img']['width'];
+                            }
+                            if (isset($postInfo['img']['height'])) {
+                                $post_image_height = $postInfo['img']['height'];
+                            }
+                        }
+                        
+                        // Only attempt to use WordPress functions if we have a post ID
+                        if (!empty($postId) && is_numeric($postId)) {
+                            // Use our safe wrapper function that handles WordPress function availability
+                            $wp_image_result = oh_safe_get_wp_image((int)$postId);
+                            
+                            if (!empty($wp_image_result['url'])) {
+                                $image_url = $wp_image_result['url'];
+                                
+                                // Update dimensions if available from WordPress
+                                if (!empty($wp_image_result['width'])) {
+                                    $post_image_width = $wp_image_result['width'];
+                                }
+                                if (!empty($wp_image_result['height'])) {
+                                    $post_image_height = $wp_image_result['height'];
+                                }
+                            }
+                        }
+                        
+                        // If we're not in WordPress or couldn't get the featured image, handle the URL differently
+                        if ($image_url === $post_image_url) {
+                            // If URL contains '/img/' or already has WordPress uploads path, keep it as is
+                            if (strpos($post_image_url, '/img/') !== false || strpos($post_image_url, '/wp-content/uploads/') !== false) {
+                                // Keep the original URL as is - no modifications needed
+                            } else if (!empty($post_image_url)) {
+                                // Get image directly from the postInfo attribute if available
+                                // The URL is neither in /img/ nor in /wp-content/uploads/, so we keep it unchanged
                             }
                         }
                         
@@ -2872,6 +2902,47 @@ function oh_render_slgb_converter_page() {
  */
 
 /**
+ * Safely get WordPress image data by post ID, handling environments where WP functions may not be available
+ * 
+ * @param int $post_id The WordPress post ID to get image data for
+ * @return array Image data with url, width, height keys; empty array if unavailable
+ */
+function oh_safe_get_wp_image($post_id) {
+    $result = array(
+        'url' => '',
+        'width' => '',
+        'height' => ''
+    );
+    
+    // Only proceed if we're in a WordPress environment and required functions exist
+    if (defined('ABSPATH') && function_exists('get_post_thumbnail_id') && function_exists('wp_get_attachment_image_src')) {
+        try {
+            $thumbnail_id = get_post_thumbnail_id($post_id);
+            
+            if ($thumbnail_id) {
+                $image_data = wp_get_attachment_image_src($thumbnail_id, 'full');
+                
+                if ($image_data && !empty($image_data[0])) {
+                    $result['url'] = $image_data[0];
+                    
+                    if (!empty($image_data[1])) {
+                        $result['width'] = $image_data[1];
+                    }
+                    
+                    if (!empty($image_data[2])) {
+                        $result['height'] = $image_data[2];
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Silently handle any errors, returning empty array
+        }
+    }
+    
+    return $result;
+}
+
+/**
  * 3.1. Add Plugin Settings Link
  */
 function oh_slgb_plugin_action_links($links) {
@@ -2881,3 +2952,4 @@ function oh_slgb_plugin_action_links($links) {
     return $links;
 }
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'oh_slgb_plugin_action_links');
+
